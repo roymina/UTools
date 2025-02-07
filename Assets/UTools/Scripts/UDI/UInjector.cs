@@ -22,10 +22,12 @@ namespace UTools
             foreach (var field in fields)
             {
                 var injectAttribute = field.GetCustomAttribute<InjectAttribute>();
-                if (injectAttribute != null)
+                var persistInjectAttribute = field.GetCustomAttribute<PersistInjectAttribute>();
+
+                if (injectAttribute != null || persistInjectAttribute != null)
                 {
                     var fieldType = field.FieldType;
-                    var instance = UDependencyContainer.Instance.Resolve(fieldType);
+                    var instance = UDIContainer.Instance.Resolve(fieldType);
                     field.SetValue(target, instance);
                 }
             }
