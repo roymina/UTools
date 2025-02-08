@@ -17,7 +17,12 @@ namespace UTools
 {
     public class UDIContainer
     {
-        private readonly Dictionary<Type, object> _services = new Dictionary<Type, object>();
+        private static readonly Dictionary<Type, object> _services = new Dictionary<Type, object>();
+
+        public void Register<T>(T instance) where T : class
+        {
+            _services[typeof(T)] = instance;
+        }
 
         public void Register<T>() where T : class, new()
         {
@@ -28,6 +33,7 @@ namespace UTools
         {
             return _services.TryGetValue(typeof(T), out var service) ? service as T : throw new Exception($"Service {typeof(T)} not registered");
         }
+
 
         public object Resolve(Type type)
         {
@@ -45,7 +51,8 @@ namespace UTools
                 }
 
                 var newGameObject = new GameObject(type.Name);
-                return newGameObject.AddComponent(type);
+                var newInstance = newGameObject.AddComponent(type);
+                return newInstance;
             }
 
             throw new Exception($"Service {type} not registered");

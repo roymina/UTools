@@ -9,7 +9,7 @@ EditorBuildSettings:
     path: Assets/UTools/Example/UExample.unity
     guid: 9fc0d4010bbf28b4594072e72b8655ab
   - enabled: 1
-    path: Assets/UTools/Example/Scripts/UDITests/_TestDINewScene.unity
+    path: Assets/UTools/Example/UDITests/_TestDINewScene.unity
     guid: 0602e3344b552c44a9cec627fa814169
   m_configObjects: {}
   m_UseUCBPForAssetBundles: 0
