@@ -10,71 +10,60 @@
 //-----------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
 
 namespace UTools
 {
     public class UDIContainer
     {
-        private static UDIContainer _instance;
-        private Dictionary<Type, object> _singletons = new Dictionary<Type, object>();
-        private Dictionary<Type, object> _persistentSingletons = new Dictionary<Type, object>();
-        private Dictionary<Type, Func<object>> _factories = new Dictionary<Type, Func<object>>();
+        private readonly Dictionary<Type, object> _services = new Dictionary<Type, object>();
 
-        public static UDIContainer Instance
+        public void Register<T>() where T : class, new()
         {
-            get
-            {
-                if (_instance == null)
-                {
-                    _instance = new UDIContainer();
-                }
-                return _instance;
-            }
+            _services[typeof(T)] = new T();
         }
 
-        private UDIContainer()
+        public T Resolve<T>() where T : class
         {
-        }
-
-        public void RegisterSingleton<T>(T instance)
-        {
-            _singletons[typeof(T)] = instance;
-        }
-
-        public void RegisterPersistentSingleton<T>(T instance)
-        {
-            _persistentSingletons[typeof(T)] = instance;
-        }
-
-        public void RegisterFactory<T>(Func<T> factory)
-        {
-            _factories[typeof(T)] = () => factory();
-        }
-
-        public T Resolve<T>()
-        {
-            return (T)Resolve(typeof(T));
+            return _services.TryGetValue(typeof(T), out var service) ? service as T : throw new Exception($"Service {typeof(T)} not registered");
         }
 
         public object Resolve(Type type)
         {
-            if (_persistentSingletons.ContainsKey(type))
+            if (_services.TryGetValue(type, out var service))
             {
-                return _persistentSingletons[type];
+                return service;
             }
 
-            if (_singletons.ContainsKey(type))
+            if (typeof(MonoBehaviour).IsAssignableFrom(type))
             {
-                return _singletons[type];
+                var existingInstance = UnityEngine.Object.FindFirstObjectByType(type);
+                if (existingInstance != null)
+                {
+                    return existingInstance;
+                }
+
+                var newGameObject = new GameObject(type.Name);
+                return newGameObject.AddComponent(type);
             }
 
-            if (_factories.ContainsKey(type))
-            {
-                var instance = _factories[type].Invoke();
-                return instance;
-            }
+            throw new Exception($"Service {type} not registered");
+        }
 
-            throw new Exception($"No registration for type {type.Name}");
+        public void InjectDependencies(MonoBehaviour[] objects)
+        {
+            foreach (var obj in objects)
+            {
+                var fields = obj.GetType().GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    .Where(f => Attribute.IsDefined(f, typeof(InjectAttribute)));
+
+                foreach (var field in fields)
+                {
+                    var service = Resolve(field.FieldType);
+                    field.SetValue(obj, service);
+                }
+            }
         }
     }
 }
