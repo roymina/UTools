@@ -27,6 +27,7 @@ namespace UTools
         {
             var allComponents = FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
             Container.InjectDependencies(allComponents);
+            Container.InjectDependencies();
         }
     }
 }

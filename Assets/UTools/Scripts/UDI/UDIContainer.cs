@@ -22,7 +22,9 @@ namespace UTools
 
         public void Register<T>() where T : class, new()
         {
-            _services[typeof(T)] = new T();
+            var instance = new T();
+            _services[typeof(T)] = instance;
+            InjectMethods(instance);
         }
 
         public T Resolve<T>() where T : class
@@ -53,7 +55,13 @@ namespace UTools
 
             throw new Exception($"Service {type} not registered");
         }
-
+        public void InjectDependencies()
+        {
+            foreach (var service in _services.Values)
+            {
+                InjectMethods(service);
+            }
+        }
         public void InjectDependencies(MonoBehaviour[] objects)
         {
             foreach (var obj in objects)
@@ -74,17 +82,16 @@ namespace UTools
             }
         }
 
-        private void InjectMethods(MonoBehaviour obj)
+        private void InjectMethods(object obj)
         {
             var methods = obj.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-         .Where(m => Attribute.IsDefined(m, typeof(InjectAttribute)));
+                .Where(m => Attribute.IsDefined(m, typeof(InjectAttribute)));
 
             foreach (var method in methods)
             {
                 var parameters = method.GetParameters()
                     .Select(p => Resolve(p.ParameterType))
                     .ToArray();
-
                 method.Invoke(obj, parameters);
             }
         }
