@@ -27,12 +27,6 @@ namespace UTools
             InjectMethods(instance);
         }
 
-        public T Resolve<T>() where T : class
-        {
-            return _services.TryGetValue(typeof(T), out var service) ? service as T : throw new Exception($"Service {typeof(T)} not registered");
-        }
-
-
         public object Resolve(Type type)
         {
             if (_services.TryGetValue(type, out var service))
@@ -53,8 +47,22 @@ namespace UTools
                 return newInstance;
             }
 
-            throw new Exception($"Service {type} not registered");
+            return RegisterAndResolve(type);
         }
+        private T RegisterAndResolve<T>() where T : class, new()
+        {
+            Register<T>();
+            return _services[typeof(T)] as T;
+        }
+
+        private object RegisterAndResolve(Type type)
+        {
+            var instance = Activator.CreateInstance(type);
+            _services[type] = instance;
+            InjectMethods(instance);
+            return instance;
+        }
+
         public void InjectDependencies()
         {
             foreach (var service in _services.Values)
