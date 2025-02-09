@@ -2,8 +2,6 @@ using UTools;
 
 public class _TestInstaller : UDIInstallerBase
 {
-
-
     protected override void RegisterGlobalServices()
     {
 
