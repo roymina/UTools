@@ -103,7 +103,6 @@ namespace UTools
             if (children is null || children?.Length == 0)
             {
                 children = UUtils.GetAllChildren(gameObject);
-
             }
 
             foreach (var field in fields)

@@ -11,6 +11,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using UnityEngine;
 
 namespace UTools
@@ -18,11 +19,6 @@ namespace UTools
     public class UDIContainer
     {
         private static readonly Dictionary<Type, object> _services = new Dictionary<Type, object>();
-
-        public void Register<T>(T instance) where T : class
-        {
-            _services[typeof(T)] = instance;
-        }
 
         public void Register<T>() where T : class, new()
         {
@@ -62,14 +58,34 @@ namespace UTools
         {
             foreach (var obj in objects)
             {
-                var fields = obj.GetType().GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                    .Where(f => Attribute.IsDefined(f, typeof(InjectAttribute)));
+                InjectFields(obj);
+                InjectMethods(obj);
+            }
+        }
+        private void InjectFields(MonoBehaviour obj)
+        {
+            var fields = obj.GetType().GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
+                .Where(f => Attribute.IsDefined(f, typeof(InjectAttribute)));
 
-                foreach (var field in fields)
-                {
-                    var service = Resolve(field.FieldType);
-                    field.SetValue(obj, service);
-                }
+            foreach (var field in fields)
+            {
+                var service = Resolve(field.FieldType);
+                field.SetValue(obj, service);
+            }
+        }
+
+        private void InjectMethods(MonoBehaviour obj)
+        {
+            var methods = obj.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+         .Where(m => Attribute.IsDefined(m, typeof(InjectAttribute)));
+
+            foreach (var method in methods)
+            {
+                var parameters = method.GetParameters()
+                    .Select(p => Resolve(p.ParameterType))
+                    .ToArray();
+
+                method.Invoke(obj, parameters);
             }
         }
     }

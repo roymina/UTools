@@ -13,7 +13,7 @@ using System;
 
 namespace UTools
 {
-    [AttributeUsage(AttributeTargets.Field)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Method)]
     public class InjectAttribute : Attribute
     {
     }

@@ -4,7 +4,7 @@ using UnityEngine.UI;
 using UTools;
 public class _TestInjection : UBehaviour
 {
-    [Inject] _TestService _testService;
+    [Inject] _TestServiceA _testService;
     [Inject] _TestMono _testMono;
 
     [Child] TextMeshProUGUI txtServiceInejction;
