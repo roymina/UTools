@@ -13,7 +13,7 @@ using System;
 
 namespace UTools
 {
-    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+    [AttributeUsage(AttributeTargets.Field, Inherited = false)]
     public class ChildAttribute : Attribute
     {
         public readonly string Name;

@@ -18,7 +18,11 @@ namespace UTools
     {
         public string Path { get; }
 
-        public ResourceAttribute(string path)
+        public ResourceAttribute()
+        {
+
+        }
+        public ResourceAttribute(string path = "")
         {
             Path = path;
         }
