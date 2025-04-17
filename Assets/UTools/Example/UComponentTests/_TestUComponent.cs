@@ -5,11 +5,11 @@ using UTools;
 
 public class _TestUComponent : MonoBehaviour
 {
-    private Highlight highlight;
+    private Highlighter highlight;
     // Start is called before the first frame update
     void Start()
     {
-        highlight = GetComponent<Highlight>();
+        highlight = GetComponent<Highlighter>();
     }
 
     // Update is called once per frame
