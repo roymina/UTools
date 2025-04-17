@@ -1,15 +1,18 @@
 using UnityEngine;
 using System;
 
-[AttributeUsage(AttributeTargets.Field, Inherited = false)]
-public class ShowIfAttribute : PropertyAttribute
+namespace UTools
 {
-    public readonly string ConditionField;
-    public readonly bool Inverse;
-
-    public ShowIfAttribute(string conditionField, bool inverse = true)
+    [AttributeUsage(AttributeTargets.Field, Inherited = false)]
+    public class ShowIfAttribute : PropertyAttribute
     {
-        ConditionField = conditionField;
-        Inverse = inverse;
+        public readonly string ConditionField;
+        public readonly bool Inverse;
+
+        public ShowIfAttribute(string conditionField, bool inverse = true)
+        {
+            ConditionField = conditionField;
+            Inverse = inverse;
+        }
     }
 }
