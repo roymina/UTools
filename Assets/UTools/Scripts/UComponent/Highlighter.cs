@@ -1,30 +1,59 @@
-using System.Collections;
+//-----------------------------------------------------------------------
+// <copyright file="ChildAttribute.cs" company="DxTech Co. Ltd.">
+//     Copyright (c) DxTech Co. Ltd.. All rights reserved.
+// </copyright>
+// <author>Roy</author>
+// <date>2025-02-07</date>
+/// <summary>
+/// The Highlighter class provides a dynamic blinking highlight effect for game objects.
+/// It adjusts the material's color and emission properties to create a visual effect
+/// that draws attention to the object. The class supports transparent materials and
+/// includes performance optimizations for real-time updates.
+/// 
+/// Key Features:
+/// - Dynamic blinking highlight effect.
+/// - Automatic material initialization and management.
+/// - Support for transparent materials.
+/// - Adjustable emission intensity and blinking speed.
+/// - Performance optimization through update interval control.
+/// 
+/// Usage:
+/// - Call StartHighlight() to begin the highlight effect.
+/// - Call StopHighlight() to end the highlight effect and reset materials.
+/// </summary>
+//-----------------------------------------------------------------------
+using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
 
 namespace UTools
 {
     public class Highlighter : MonoBehaviour
     {
-
-        [Header("闪烁设置")]
-        public Color highlightColor = Color.yellow; // 高亮颜色
-        public float blinkSpeed = 2f; // 闪烁速度
-        public float minIntensity = 0.2f; // 最小亮度
-        public float maxIntensity = 1.0f; // 最大亮度
-        [Tooltip("是否自动启用材质发光")]
+        [Header("Blink Settings")]
+        public Color highlightColor = Color.yellow;
+        public float blinkSpeed = 2f;
+        public float minIntensity = 0.2f;
+        public float maxIntensity = 1.0f;
+        [Tooltip("Automatically enable material emission")]
         public bool autoEnableEmission = true;
-        [Tooltip("更新频率(帧数)，值越大性能越好")]
+        [Tooltip("Update frequency (frames), higher values improve performance")]
         public int updateInterval = 2;
-        [Tooltip("发光强度")]
+        [Tooltip("Emission intensity")]
         public float emissiveIntensity = 200f;
+        [Tooltip("Maintain material transparency")]
+        public bool maintainTransparency = true;
+        [Tooltip("toggle highlight")]
+        public bool isHighlighting = false;
 
         private List<Renderer> renderers = new List<Renderer>();
         private List<Material> materials = new List<Material>();
         private List<Color> initialColors = new List<Color>();
+        private List<float> initialAlphaValues = new List<float>();
+        private List<bool> isTransparentMaterial = new List<bool>();
         private float currentIntensity;
-        private bool isHighlighting = false;
+
+
         private int frameCounter = 0;
         private Color blinkColor;
         private bool materialsInitialized = false;
@@ -37,37 +66,76 @@ namespace UTools
 
         void Start()
         {
-            // 确保初始状态正确
+            // Ensure the initial state is correct
             ResetMaterials();
         }
 
-        // 初始化材质，只执行一次
+        // Check if the material is transparent
+        private bool IsMaterialTransparent(Material material)
+        {
+            if (material == null) return false;
+
+            // Check rendering mode
+            if (material.HasProperty("_Mode"))
+            {
+                int mode = (int)material.GetFloat("_Mode");
+                // Mode 2=Fade, 3=Transparent
+                return mode == 2 || mode == 3;
+            }
+
+            // Check rendering queue
+            if (material.renderQueue >= 3000)
+                return true;
+
+            // Check keywords
+            if (material.IsKeywordEnabled("_ALPHABLEND_ON") ||
+                material.IsKeywordEnabled("_ALPHAPREMULTIPLY_ON") ||
+                material.IsKeywordEnabled("_SURFACE_TYPE_TRANSPARENT"))
+                return true;
+
+            // Check alpha value of the color
+            if (material.HasProperty("_Color") && material.color.a < 0.99f)
+                return true;
+
+            return false;
+        }
+
+        // Initialize materials, only executed once
         private void InitializeMaterials()
         {
             if (materialsInitialized) return;
 
-            // 获取所有渲染器组件
             renderers = GetComponentsInChildren<Renderer>().ToList();
+            initialAlphaValues.Clear();
+            isTransparentMaterial.Clear();
+
             if (renderers.Count == 0)
             {
-                Debug.LogWarning("没有找到任何渲染器组件，无法应用高亮效果");
+                Debug.LogWarning("No valid renderer components found, unable to apply highlight effect");
                 return;
             }
 
-            // 收集所有材质
+            // Collect all materials
             foreach (Renderer renderer in renderers)
             {
                 if (renderer == null) continue;
-                materials.AddRange(renderer.materials.ToList());
+
+                Material[] rendererMaterials = renderer.materials;
+                foreach (Material mat in rendererMaterials)
+                {
+                    materials.Add(mat);
+                    bool isTransparent = IsMaterialTransparent(mat);
+                    isTransparentMaterial.Add(isTransparent);
+
+                    // Save color and transparency information
+                    initialColors.Add(mat.color);
+                    initialAlphaValues.Add(mat.color.a);
+
+                    Debug.Log($"Material: {mat.name}, Is Transparent: {isTransparent}, Initial Alpha Value: {mat.color.a}");
+                }
             }
 
-            // 保存初始颜色
-            foreach (Material material in materials)
-            {
-                initialColors.Add(material.color);
-            }
-
-            // 启用发光
+            // Enable emission
             if (autoEnableEmission)
                 EnableEmission();
 
@@ -79,29 +147,29 @@ namespace UTools
             if (!isHighlighting || !materialsInitialized || materials.Count == 0)
                 return;
 
-            // 使用计数器减少更新频率
+            // Use counter to reduce update frequency
             frameCounter++;
             if (frameCounter < updateInterval)
                 return;
 
             frameCounter = 0;
 
-            // 使用PingPong函数产生平滑的闪烁效果
+            // Use PingPong function to create smooth blinking effect
             float v = Mathf.PingPong(Time.time * blinkSpeed, 1);
             currentIntensity = Mathf.Lerp(minIntensity, maxIntensity, v);
 
-            // 预计算颜色值
+            // Precompute color value
             blinkColor = Color.Lerp(Color.white, highlightColor, v);
 
             ApplyHighlight(v);
         }
 
-        // 开始高亮闪烁
+        // Start blinking highlight
         public void StartHighlight()
         {
             Debug.Log("StartHighlight");
 
-            // 确保材质已初始化
+            // Ensure materials are initialized
             if (!materialsInitialized)
                 InitializeMaterials();
 
@@ -109,7 +177,7 @@ namespace UTools
             frameCounter = 0;
         }
 
-        // 停止高亮闪烁
+        // Stop blinking highlight
         public void StopHighlight()
         {
             Debug.Log("StopHighlight");
@@ -117,27 +185,53 @@ namespace UTools
             ResetMaterials();
         }
 
-        // 应用高亮效果
+        // Apply highlight effect
         private void ApplyHighlight(float intensity)
         {
-            foreach (Material material in materials)
+            for (int i = 0; i < materials.Count; i++)
             {
+                Material material = materials[i];
                 if (material == null) continue;
 
-                // 设置发光属性
+                // Set emission properties
                 material.SetColor("_EmissiveColor", blinkColor);
                 material.SetFloat("_EmissiveIntensity", emissiveIntensity);
                 material.SetFloat("_EmissiveExposureWeight", intensity);
-                material.color = blinkColor;
+
+                // Preserve transparency when setting color
+                if (maintainTransparency && isTransparentMaterial[i] && i < initialAlphaValues.Count)
+                {
+                    // Create a new color, preserving the original alpha value
+                    Color newColor = blinkColor;
+                    newColor.a = initialAlphaValues[i];
+                    material.color = newColor;
+
+                    // Ensure transparent rendering mode remains unchanged
+                    if (material.HasProperty("_SrcBlend"))
+                        material.SetFloat("_SrcBlend", 1); // SrcAlpha
+
+                    if (material.HasProperty("_DstBlend"))
+                        material.SetFloat("_DstBlend", 10); // OneMinusSrcAlpha
+
+                    if (material.HasProperty("_ZWrite"))
+                        material.SetFloat("_ZWrite", 0); // Disable depth writing
+
+                    if (material.renderQueue < 3000)
+                        material.renderQueue = 3000; // Transparent rendering queue
+                }
+                else
+                {
+                    material.color = blinkColor;
+                }
             }
         }
 
-        // 重置材质
+        // Reset materials
         private void ResetMaterials()
         {
             if (!materialsInitialized || materials.Count == 0) return;
 
-            // 恢复材质原始状态
+            // Restore original state of materials
             for (int i = 0; i < materials.Count; i++)
             {
                 if (i < initialColors.Count)
@@ -150,7 +244,7 @@ namespace UTools
             }
         }
 
-        // 启用所有材质的发光功能
+        // Enable emission for all materials
         private void EnableEmission()
         {
             if (materials.Count == 0) return;
@@ -159,16 +253,16 @@ namespace UTools
             {
                 if (material == null) continue;
 
-                // 设置发光属性为初始状态
+                // Set emission properties to initial state
                 material.SetColor("_EmissiveColor", Color.black);
                 material.SetFloat("_EmissiveIntensity", 0);
                 material.SetFloat("_EmissiveExposureWeight", 1);
             }
 
-            Debug.Log("已启用所有材质的发光功能并重置发光颜色");
+            Debug.Log("Emission enabled for all materials and reset emission color");
         }
 
-        // 当对象被禁用或销毁时重置状态
+        // Reset state when the object is disabled or destroyed
         private void OnDisable()
         {
             if (isHighlighting)
@@ -177,6 +271,5 @@ namespace UTools
                 ResetMaterials();
             }
         }
-
     }
 }

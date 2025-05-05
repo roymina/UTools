@@ -5,7 +5,7 @@
 // <author>Roy</author>
 // <date>2025-02-07</date>
 // <summary>
-// 
+// Attribute to mark fields or methods for dependency injection.
 // </summary>
 //-----------------------------------------------------------------------
 

@@ -1,6 +1,16 @@
+//-----------------------------------------------------------------------
+// <copyright file="ShowIfDrawer.cs" company="DxTech Co. Ltd.">
+//     Copyright (c) DxTech Co. Ltd. All rights reserved.
+// </copyright>
+// <author>Roy</author>
+// <date>2025-02-07</date>
+// <summary>
+// Custom property drawer for the ShowIfAttribute to conditionally display fields in the Unity Inspector.
+// </summary>
+//-----------------------------------------------------------------------
+
 using UnityEngine;
 using UnityEditor;
-using System.Reflection;
 
 namespace UTools.Editor
 {
@@ -39,13 +49,14 @@ namespace UTools.Editor
 
             if (conditionProperty == null)
             {
-                Debug.LogError($"条件字段 {showIf.ConditionField} 未找到");
+                // Logs an error if the condition field is not found
+                Debug.LogError($"Condition field {showIf.ConditionField} not found");
                 return true;
             }
 
             bool conditionValue = false;
 
-            // 根据字段类型获取值
+            // Retrieves the value of the condition field based on its type
             switch (conditionProperty.propertyType)
             {
                 case SerializedPropertyType.Boolean:
@@ -62,7 +73,8 @@ namespace UTools.Editor
                     conditionValue = conditionProperty.objectReferenceValue != null;
                     break;
                 default:
-                    Debug.LogError($"不支持的条件字段类型: {conditionProperty.propertyType}");
+                    // Logs an error if the condition field type is unsupported
+                    Debug.LogError($"Unsupported condition field type: {conditionProperty.propertyType}");
                     return true;
             }
 

@@ -98,6 +98,21 @@ namespace UTools
         {
             return Regex.IsMatch(input, @"^[\u4e00-\u9fa5]*$");
         }
+        /// <summary>
+        /// Checks if the input string is a valid IP address using regex.
+        /// </summary>
+        /// <param name="input"></param>
+        /// <returns></returns>
+        public static bool IsIPAddress(this string input)
+        {
+            string pattern = @"^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\." +
+                             @"(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\." +
+                             @"(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\." +
+                             @"(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$";
+
+            return !string.IsNullOrEmpty(input) &&
+                   Regex.IsMatch(input.Trim(), pattern);
+        }
 
         /// <summary>
         /// Converts the string to a Base64 string.
@@ -177,8 +192,84 @@ namespace UTools
                 return TimeSpan.FromSeconds(0);
             }
         }
+        public static string ToLocalizedString(this Enum value)
+        {
+            System.Reflection.FieldInfo field = value.GetType().GetField(value.ToString());
+            if (field != null)
+            {
+                var attribute = Attribute.GetCustomAttribute(field, typeof(System.ComponentModel.DescriptionAttribute)) as System.ComponentModel.DescriptionAttribute;
+                if (attribute != null)
+                {
+                    return attribute.Description;
+                }
+            }
+            return value.ToString(); // 如果没有标注，返回默认枚举名称
+        }
         #endregion
+        #region File & Data
+        /// <summary>
+        /// Reads file content from the persistent data path.
+        /// </summary>
+        /// <param name="filename">The file name, with multi-level paths separated by commas.</param>
+        /// <param name="createNewIfNotExist">Whether to create a new file if it does not exist.</param>
+        /// <returns>The file content as a string, or null if the file does not exist.</returns>
+        public static string ReadFromPersistDataPath(string filename, bool createNewIfNotExist = true)
+        {
+            if (string.IsNullOrEmpty(filename))
+            {
+                Debug.LogWarning("Filename is null or empty.");
+                return string.Empty;
+            }
+            string fullPath = System.IO.Path.Combine(Application.persistentDataPath, filename);
 
+
+            if (!System.IO.File.Exists(fullPath))
+            {
+                if (createNewIfNotExist)
+                {
+                    System.IO.File.Create(fullPath).Dispose();
+                    Debug.Log($"File not found: {fullPath}, creating a new file.");
+                }
+                else
+                {
+                    Debug.LogWarning($"File not found: {fullPath}");
+                }
+
+                return string.Empty;
+            }
+            return System.IO.File.ReadAllText(fullPath);
+        }
+
+        public static void WriteToPersistDataPath(string content, string filename)
+        {
+            if (string.IsNullOrEmpty(filename))
+            {
+                Debug.LogWarning("Filename is null or empty.");
+                return;
+            }
+            if (content == null)
+            {
+                Debug.LogWarning("Content is null.");
+                return;
+            }
+            string fullPath = System.IO.Path.Combine(Application.persistentDataPath, filename);
+            if (!System.IO.File.Exists(fullPath))
+            {
+                System.IO.File.Create(fullPath).Dispose();
+            }
+            System.IO.File.WriteAllText(fullPath, content);
+        }
+        /// <summary>
+        /// get the project root folder path
+        /// </summary>
+        /// <returns></returns>
+        public static string GetProjectRootFolder()
+        {
+
+            string projectRoot = Application.dataPath.Substring(0, Application.dataPath.LastIndexOf("/Assets"));
+            return projectRoot;
+        }
+        #endregion
         #region GameObject & Components 
         /// <summary>
         /// Finds a child GameObject by name.
@@ -233,13 +324,25 @@ namespace UTools
         /// get all children & decendents, includs deactived
         /// </summary>
         /// <returns></returns>
-        public static GameObject[] GetAllChildren(this GameObject self)
+        public static GameObject[] GetAllDecendents(this GameObject self)
         {
             Transform[] childTransforms = self.GetComponentsInChildren<Transform>(true);
             return Array.FindAll(childTransforms, transform => transform.gameObject != self)
                         .Select(transform => transform.gameObject)
                         .ToArray();
         }
+
+        // 获取一级子物体的列表
+        public static List<GameObject> GetFirstLevelChildren(this GameObject self)
+        {
+            List<GameObject> children = new List<GameObject>();
+            for (int i = 0; i < self.transform.childCount; i++)
+            {
+                children.Add(self.transform.GetChild(i).gameObject);
+            }
+            return children;
+        }
+
 
         /// <summary>
         /// Checks if a child GameObject with the specified name exists.
@@ -253,13 +356,14 @@ namespace UTools
             return FindChild(self, searchText, fuzzySearch) != null;
         }
         /// <summary>
-        ///     只显示一个child
+        /// Displays only one child GameObject.
         /// </summary>
-        /// <param name="self"></param>
-        /// <param name="childName"></param>
+        /// <param name="self">The parent GameObject.</param>
+        /// <param name="childName">The name of the child to display.</param>
+        /// <returns>The displayed child GameObject.</returns>
         public static GameObject ShowOneChild(this GameObject self, string childName)
         {
-            GameObject[] children = self.GetAllChildren();
+            GameObject[] children = self.GetAllDecendents();
             if (!children.Any())
             {
                 return null;
@@ -274,7 +378,7 @@ namespace UTools
         }
         public static GameObject HideOneChild(this GameObject self, string childName)
         {
-            GameObject[] children = self.GetAllChildren();
+            GameObject[] children = self.GetAllDecendents();
             if (!children.Any())
             {
                 return null;
@@ -290,7 +394,7 @@ namespace UTools
 
         public static GameObject ShowOneChild(this GameObject self, int childIndex)
         {
-            GameObject[] children = self.GetAllChildren();
+            GameObject[] children = self.GetAllDecendents();
             if (!children.Any())
             {
                 return null;
@@ -308,7 +412,7 @@ namespace UTools
         }
         public static GameObject HideOneChild(this GameObject self, int childIndex)
         {
-            GameObject[] children = self.GetAllChildren();
+            GameObject[] children = self.GetAllDecendents();
             if (!children.Any())
             {
                 return null;
@@ -327,7 +431,7 @@ namespace UTools
 
         public static GameObject ShowOneChild(this GameObject self, GameObject childGo)
         {
-            GameObject[] children = self.GetAllChildren();
+            GameObject[] children = self.GetAllDecendents();
             if (!children.Any())
             {
                 return null;
@@ -342,7 +446,7 @@ namespace UTools
         }
         public static GameObject HideOneChild(this GameObject self, GameObject childGo)
         {
-            GameObject[] children = self.GetAllChildren();
+            GameObject[] children = self.GetAllDecendents();
             if (!children.Any())
             {
                 return null;
@@ -362,7 +466,7 @@ namespace UTools
         /// <param name="show">Whether to show or hide the children.</param>
         public static void ToggleAllChildren(this GameObject self, bool show)
         {
-            GameObject[] children = self.GetAllChildren();
+            GameObject[] children = self.GetAllDecendents();
             if (!children.Any())
             {
                 return;
@@ -569,6 +673,52 @@ namespace UTools
             return closestObject;
         }
 
+        /// <summary>
+        /// Finds the parent GameObject by name, traversing upwards.
+        /// </summary>
+        /// <param name="self">The starting GameObject.</param>
+        /// <param name="name">The name of the parent to find.</param>
+        /// <returns>The parent GameObject if found; otherwise, null.</returns>
+        public static GameObject FindParent(this GameObject self, string name)
+        {
+            Transform current = self.transform.parent;
+            while (current != null)
+            {
+                if (current.name == name)
+                {
+                    return current.gameObject;
+                }
+                current = current.parent;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Finds the first component of type T in the parent hierarchy.
+        /// If a name is provided, it finds the parent GameObject with the specified name and returns the component of type T.
+        /// </summary>
+        /// <typeparam name="T">The type of component to find.</typeparam>
+        /// <param name="self">The starting GameObject.</param>
+        /// <param name="name">The name of the parent GameObject to find (optional).</param>
+        /// <returns>The component of type T if found; otherwise, null.</returns>
+        public static T FindComponentInParent<T>(this GameObject self, string name = null) where T : Component
+        {
+            Transform current = self.transform.parent;
+            while (current != null)
+            {
+                if (name == null || current.name == name)
+                {
+                    T component = current.GetComponent<T>();
+                    if (component != null)
+                    {
+                        return component;
+                    }
+                }
+                current = current.parent;
+            }
+            return null;
+        }
+
         private static void SetInteractiveNow(this RectTransform self, bool active, bool hide)
         {
             CanvasGroup cg = self.gameObject.EnsureComponent<CanvasGroup>();
@@ -694,8 +844,239 @@ namespace UTools
             return new Color(r, g, b, a);
         }
 
-        #endregion
+        /// <summary>
+        /// Toggles the blinking effect on a 3D object.
+        /// </summary>
+        /// <param name="self">The GameObject to toggle blinking on.</param>
+        /// <param name="blink">Whether to enable or disable blinking.</param>
+        public static void ToggleBlink(this GameObject self, bool blink)
+        {
+            Highlighter blink3D = self.EnsureComponent<Highlighter>();
+            if (blink)
+            {
+                blink3D.StartHighlight();
+            }
+            else
+            {
+                blink3D.StopHighlight();
+            }
+        }
+        /// <summary>
+        /// set layer
+        /// </summary>
+        /// <param name="self"></param>
+        /// <param name="layerName"></param>
+        public static void SetLayer(this GameObject self, string layerName)
+        {
+            int roomSurfaceLayer = LayerMask.NameToLayer("RoomSurface");
+            if (roomSurfaceLayer == -1)
+            {
+                Debug.LogError($"Layer '{layerName}' not found.");
+                return;
+            }
+            self.layer = roomSurfaceLayer;
+        }
 
+        #endregion
+        #region Mesh
+
+        public static GameObject GenerateSkirtingLine(Vector3 center, Vector2 extent, Material material,
+           float standardWidth = 10f, float standardHeight = 10f, float fixedWidth = 0.01f, float fixedHeight = 0.08f)
+        {
+            IList<Vector3> points = new List<Vector3>();
+            var halfExtentY = extent.y * 0.5f;
+            var realCenter = center - new Vector3(0, halfExtentY, 0) + new Vector3(0, fixedHeight * 0.5f, fixedWidth * 0.5f);
+            var realHalfExtentX = extent.x * 0.5f;
+            var realHalfExtentY = fixedHeight * 0.5f;
+            var realHalfExtentZ = fixedWidth * 0.5f;
+
+            var bottomY = realCenter.y - realHalfExtentY;
+            var topY = realCenter.y + realHalfExtentY;
+            var leftX = realCenter.x - realHalfExtentX;
+            var rightX = realCenter.x + realHalfExtentX;
+            var farZ = realCenter.z - realHalfExtentZ;
+            var nearZ = realCenter.z + realHalfExtentZ;
+
+            var node1 = new Vector3(rightX, topY, nearZ);
+            var node2 = new Vector3(rightX, topY, farZ);
+            var node3 = new Vector3(leftX, topY, farZ);
+            var node4 = new Vector3(leftX, topY, nearZ);
+            var node5 = new Vector3(leftX, topY, nearZ);
+            var node6 = new Vector3(leftX, bottomY, nearZ);
+            var node7 = new Vector3(rightX, bottomY, nearZ);
+            var node8 = new Vector3(rightX, topY, nearZ);
+
+            points.Add(node1);
+            points.Add(node2);
+            points.Add(node3);
+            points.Add(node4);
+            points.Add(node5);
+            points.Add(node6);
+            points.Add(node7);
+            points.Add(node8);
+
+            var pArray = points.ToArray();
+
+            var w = extent.x / standardWidth;
+            var h = fixedHeight / standardHeight;
+            Vector2[] uvs = new Vector2[pArray.Length];
+            uvs[0] = new Vector2(w, 0);
+            uvs[1] = new Vector2(w, h);
+            uvs[2] = new Vector2(0, h);
+            uvs[3] = new Vector2(0, 0);
+            uvs[4] = new Vector2(0, h);
+            uvs[5] = new Vector2(0, 0);
+            uvs[6] = new Vector2(w, 0);
+            uvs[7] = new Vector2(w, h);
+
+            var meshObject = new GameObject("SkirtingLine");
+            var meshFilter = meshObject.AddComponent<MeshFilter>();
+            var meshRenderer = meshObject.AddComponent<MeshRenderer>();
+
+            Mesh mesh = new Mesh();
+            mesh.vertices = pArray;
+            mesh.uv = uvs;
+
+            var tr = new Triangulator(pArray);
+            int[] triangles = new[] { 0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4 };
+
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            meshFilter.mesh = mesh;
+            meshRenderer.material = material;
+
+            return meshObject;
+
+        }
+        public static GameObject GenerateQuadMesh(Vector3 center, Vector2 extent, Material material, float standardWidth = 10f, float standardHeight = 10f)
+        {
+            IList<Vector3> points = new List<Vector3>();
+            var halfExtentX = extent.x * 0.5f;
+            var halfExtentY = extent.y * 0.5f;
+            var expand = 0.01f;
+            points.Add(new Vector3(center.x - halfExtentX - expand, center.y - halfExtentY - expand, center.z));
+            points.Add(new Vector3(center.x + halfExtentX + expand, center.y - halfExtentY - expand, center.z));
+            points.Add(new Vector3(center.x + halfExtentX + expand, center.y + halfExtentY + expand, center.z));
+            points.Add(new Vector3(center.x - halfExtentX - expand, center.y + halfExtentY + expand, center.z));
+            var pArray = points.ToArray();
+
+            var w = extent.x / standardWidth;
+            var h = extent.y / standardHeight;
+            Vector2[] uvs = new Vector2[pArray.Length];
+            uvs[0] = new Vector2(0, 0);
+            uvs[1] = new Vector2(w, 0);
+            uvs[2] = new Vector2(w, h);
+            uvs[3] = new Vector2(0, h);
+
+            var meshObject = new GameObject("QuadMesh");
+            var meshFilter = meshObject.AddComponent<MeshFilter>();
+            var meshRenderer = meshObject.AddComponent<MeshRenderer>();
+
+            Mesh mesh = new Mesh();
+            mesh.vertices = pArray;
+            mesh.uv = uvs;
+
+            var tr = new Triangulator(pArray);
+            int[] triangles = tr.Triangulate();
+
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            meshFilter.mesh = mesh;
+            meshRenderer.material = material;
+
+            return meshObject;
+        }
+        public static GameObject GeneratePolygonMesh(IList<Vector3> points, Material material, float standardWidth = 10f, float standardHeight = 10f)
+        {
+            var meshObject = new GameObject("GenerateMesh");
+            var meshFilter = meshObject.AddComponent<MeshFilter>();
+            var meshRenderer = meshObject.AddComponent<MeshRenderer>();
+
+            Mesh mesh = new Mesh();
+            var pArray = points.ToArray();
+            var minX = points[0].x;
+            var maxX = points[0].x;
+            var minY = points[0].y;
+            var maxY = points[0].y;
+            foreach (var point in points)
+            {
+                if (point.x < minX)
+                    minX = point.x;
+                if (maxX < point.x)
+                    maxX = point.x;
+                if (point.y < minY)
+                    minY = point.y;
+                if (maxY < point.y)
+                    maxY = point.y;
+            }
+            var u = (maxX - minX) / standardWidth;
+            var v = (maxY - minY) / standardHeight;
+            Vector2[] uvs = new Vector2[pArray.Length];
+            for (int i = 0; i < uvs.Length; i++)
+            {
+                uvs[i] = new Vector2((pArray[i].x - minX) / (maxX - minX) * u, (pArray[i].y - minY) / (maxY - minY) * v);
+            }
+            mesh.vertices = pArray;
+            mesh.uv = uvs;
+
+            var tr = new Triangulator(pArray);
+            int[] triangles = tr.Triangulate();
+
+            mesh.triangles = triangles;
+
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            meshFilter.mesh = mesh;
+            meshRenderer.material = material;
+
+            return meshObject;
+        }
+        public static GameObject GeneratePlane(Vector3 center, Vector2 extent, Material material, float standardWidth = 10f, float standardHeight = 10f)
+        {
+            IList<Vector3> points = new List<Vector3>();
+            var halfExtentX = extent.x * 0.5f;
+            var halfExtentY = extent.y * 0.5f;
+            var expand = 0.00f;
+            points.Add(new Vector3(center.x - halfExtentX - expand, center.y, center.z - halfExtentY - expand));
+            points.Add(new Vector3(center.x + halfExtentX + expand, center.y, center.z - halfExtentY - expand));
+            points.Add(new Vector3(center.x + halfExtentX + expand, center.y, center.z + halfExtentY + expand));
+            points.Add(new Vector3(center.x - halfExtentX - expand, center.y, center.z + halfExtentY + expand));
+            var pArray = points.ToArray();
+
+            var w = extent.x / standardWidth;
+            var h = extent.y / standardHeight;
+            Vector2[] uvs = new Vector2[pArray.Length];
+            uvs[0] = new Vector2(0, 0);
+            uvs[1] = new Vector2(w, 0);
+            uvs[2] = new Vector2(w, h);
+            uvs[3] = new Vector2(0, h);
+
+            var meshObject = new GameObject("PlaneMesh");
+            var meshFilter = meshObject.AddComponent<MeshFilter>();
+            var meshRenderer = meshObject.AddComponent<MeshRenderer>();
+
+            Mesh mesh = new Mesh();
+            mesh.vertices = pArray;
+            mesh.uv = uvs;
+
+            // var tr = new Triangulator(pArray);
+            int[] triangles = new int[] { 0, 3, 2, 2, 1, 0 };
+
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            meshFilter.mesh = mesh;
+            meshRenderer.material = material;
+
+            return meshObject;
+        }
+        #endregion
         #region UI
         /// <summary>
         /// Toggles the visibility of a RectTransform as a CanvasGroup.
@@ -1002,6 +1383,125 @@ namespace UTools
         Left,
         Bottom,
         Right
+    }
+
+    internal class Triangulator
+    {
+        private List<Vector3> m_points = new List<Vector3>();
+
+        public Triangulator(Vector3[] points)
+        {
+            m_points = new List<Vector3>(points);
+        }
+
+        public int[] Triangulate()
+        {
+            List<int> indices = new List<int>();
+
+            int n = m_points.Count;
+            if (n < 3)
+                return indices.ToArray();
+
+            int[] V = new int[n];
+            if (Area() > 0)
+            {
+                for (int v = 0; v < n; v++)
+                    V[v] = v;
+            }
+            else
+            {
+                for (int v = 0; v < n; v++)
+                    V[v] = (n - 1) - v;
+            }
+
+            int nv = n;
+            int count = 2 * nv;
+            for (int m = 0, v = nv - 1; nv > 2;)
+            {
+                if ((count--) <= 0)
+                    return indices.ToArray();
+
+                int u = v;
+                if (nv <= u)
+                    u = 0;
+                v = u + 1;
+                if (nv <= v)
+                    v = 0;
+                int w = v + 1;
+                if (nv <= w)
+                    w = 0;
+
+                if (Snip(u, v, w, nv, V))
+                {
+                    int a, b, c, s, t;
+                    a = V[u];
+                    b = V[v];
+                    c = V[w];
+                    indices.Add(a);
+                    indices.Add(b);
+                    indices.Add(c);
+                    m++;
+                    for (s = v, t = v + 1; t < nv; s++, t++)
+                        V[s] = V[t];
+                    nv--;
+                    count = 2 * nv;
+                }
+            }
+
+            // indices.Reverse();
+            return indices.ToArray();
+        }
+
+        private float Area()
+        {
+            int n = m_points.Count;
+            float A = 0.0f;
+            for (int p = n - 1, q = 0; q < n; p = q++)
+            {
+                Vector2 pval = m_points[p];
+                Vector2 qval = m_points[q];
+                A += pval.x * qval.y - qval.x * pval.y;
+            }
+            return (A * 0.5f);
+        }
+
+        private bool Snip(int u, int v, int w, int n, int[] V)
+        {
+            int p;
+            Vector2 A = m_points[V[u]];
+            Vector2 B = m_points[V[v]];
+            Vector2 C = m_points[V[w]];
+            if (Mathf.Epsilon > (((B.x - A.x) * (C.y - A.y)) - ((B.y - A.y) * (C.x - A.x))))
+                return false;
+            for (p = 0; p < n; p++)
+            {
+                if ((p == u) || (p == v) || (p == w))
+                    continue;
+                Vector2 P = m_points[V[p]];
+                if (InsideTriangle(A, B, C, P))
+                    return false;
+            }
+            return true;
+        }
+
+        private bool InsideTriangle(Vector2 A, Vector2 B, Vector2 C, Vector2 P)
+        {
+            float ax, ay, bx, by, cx, cy, apx, apy, bpx, bpy, cpx, cpy;
+            float cCROSSap, bCROSScp, aCROSSbp;
+
+            ax = C.x - B.x; ay = C.y - B.y;
+            bx = A.x - C.x; by = A.y - C.y;
+            cx = B.x - A.x; cy = B.y - A.y;
+            apx = P.x - A.x; apy = P.y - A.y;
+            bpx = P.x - B.x; bpy = P.y - B.y;
+            cpx = P.x - C.x; cpy = P.y - C.y;
+
+            aCROSSbp = ax * bpy - ay * bpx;
+            cCROSSap = cx * apy - cy * apx;
+            bCROSScp = bx * cpy - by * cpx;
+
+            return ((aCROSSbp >= 0.0f) && (bCROSScp >= 0.0f) && (cCROSSap >= 0.0f));
+        }
     }
 
 }

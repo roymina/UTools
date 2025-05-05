@@ -1,3 +1,14 @@
+//-----------------------------------------------------------------------
+// <copyright file="UDIInstallerBase.cs" company="DxTech Co. Ltd.">
+//     Copyright (c) DxTech Co. Ltd. All rights reserved.
+// </copyright>
+// <author>Roy</author>
+// <date>2025-02-07</date>
+// <summary>
+// Base class for dependency injection installers, managing global and scene-specific services.
+// </summary>
+//-----------------------------------------------------------------------
+
 using UnityEngine;
 using UnityEngine.SceneManagement;
 

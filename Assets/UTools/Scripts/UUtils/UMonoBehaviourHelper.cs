@@ -1,8 +1,18 @@
+//-----------------------------------------------------------------------
+// <copyright file="UMonoBehaviourHelper.cs" company="DxTech Co. Ltd.">
+//     Copyright (c) DxTech Co. Ltd. All rights reserved.
+// </copyright>
+// <author>Roy</author>
+// <date>2025-02-07</date>
+// <summary>
+// Provides a singleton MonoBehaviour helper for managing coroutines.
+// </summary>
+//-----------------------------------------------------------------------
+
 using UnityEngine;
 
 namespace UTools
 {
-
     public class MonoBehaviourHelper : MonoBehaviour
     {
         private static MonoBehaviourHelper _instance;

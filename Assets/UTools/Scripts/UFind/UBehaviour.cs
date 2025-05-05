@@ -1,3 +1,14 @@
+//-----------------------------------------------------------------------
+// <copyright file="UBehaviour.cs" company="DxTech Co. Ltd.">
+//     Copyright (c) DxTech Co. Ltd. All rights reserved.
+// </copyright>
+// <author>Roy</author>
+// <date>2025-02-07</date>
+// <summary>
+// Base MonoBehaviour class for automatically finding components, children, and resources.
+// </summary>
+//-----------------------------------------------------------------------
+
 using System;
 using System.Linq;
 using System.Reflection;
@@ -55,7 +66,7 @@ namespace UTools
                 .Where(field => Attribute.IsDefined(field, typeof(ChildAttribute)));
 
             if (!fields.Any() || transform.childCount == 0) return;
-            if (children == null || children.Length == 0) children = UUtils.GetAllChildren(gameObject);
+            if (children == null || children.Length == 0) children = UUtils.GetAllDecendents(gameObject);
 
             foreach (var field in fields)
             {
