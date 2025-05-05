@@ -18,26 +18,20 @@ namespace UTools
     {
         protected static readonly UDIContainer Container = new UDIContainer();
 
-        protected abstract void RegisterSceneServices();
-        protected abstract void RegisterGlobalServices();
+        protected abstract void RegisterServices();
 
         private void Awake()
         {
-            RegisterSceneServices();
-            InjectAllComponents();
-            SceneManager.sceneLoaded += (scene, mode) => InjectAllComponents();
+            //execute methods in inherited classes
+            RegisterServices();
+            InjectAll();
         }
-
-        public static void InitializeGlobalInstaller(UDIInstallerBase globalInstaller)
+        private void InjectAll()
         {
-            globalInstaller.RegisterGlobalServices();
-            DontDestroyOnLoad(globalInstaller.gameObject);
-        }
-
-        private void InjectAllComponents()
-        {
+            //inject mono behaviors  
             var allComponents = FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
             Container.InjectDependencies(allComponents);
+            //inject services
             Container.InjectDependencies();
         }
     }

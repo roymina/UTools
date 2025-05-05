@@ -23,6 +23,9 @@ namespace UTools
         // Dictionary to store subscribers for each message type
         private Dictionary<Type, List<Delegate>> _subscribers = new Dictionary<Type, List<Delegate>>();
 
+        // Dictionary to store pending messages for each message type
+        private Dictionary<Type, Queue<object>> _pendingMessages = new Dictionary<Type, Queue<object>>();
+
         // Ensure only one instance exists
         public static UMessageCenter Instance
         {
@@ -56,6 +59,21 @@ namespace UTools
 
             // Add the handler to the list
             _subscribers[messageType].Add(handler);
+
+            // Check if there are pending messages for this type
+            if (_pendingMessages.ContainsKey(messageType))
+            {
+                var queue = _pendingMessages[messageType];
+                while (queue.Count > 0)
+                {
+                    // Process pending messages
+                    var pendingMessage = queue.Dequeue();
+                    handler((T)pendingMessage);
+                }
+
+                // Remove the queue after processing
+                _pendingMessages.Remove(messageType);
+            }
         }
 
         /// <summary>
@@ -89,8 +107,16 @@ namespace UTools
                     handler.DynamicInvoke(message);
                 }
             }
+            else
+            {
+                // If no subscribers, add the message to the pending queue
+                if (!_pendingMessages.ContainsKey(messageType))
+                {
+                    _pendingMessages[messageType] = new Queue<object>();
+                }
+
+                _pendingMessages[messageType].Enqueue(message);
+            }
         }
     }
-
-
 }

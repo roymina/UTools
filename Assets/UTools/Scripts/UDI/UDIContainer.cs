@@ -49,11 +49,7 @@ namespace UTools
 
             return RegisterAndResolve(type);
         }
-        private T RegisterAndResolve<T>() where T : class, new()
-        {
-            Register<T>();
-            return _services[typeof(T)] as T;
-        }
+
 
         private object RegisterAndResolve(Type type)
         {
@@ -62,7 +58,9 @@ namespace UTools
             InjectMethods(instance);
             return instance;
         }
-
+        /// <summary>
+        /// Injects dependencies into all registered services.
+        /// </summary> 
         public void InjectDependencies()
         {
             foreach (var service in _services.Values)
@@ -70,6 +68,10 @@ namespace UTools
                 InjectMethods(service);
             }
         }
+        /// <summary>
+        /// Injects dependencies into all registered MonoBehaviour classes.
+        /// </summary>
+        /// <param name="objects"></param>
         public void InjectDependencies(MonoBehaviour[] objects)
         {
             foreach (var obj in objects)
