@@ -19,9 +19,15 @@ namespace UTools
     public class UDIContainer
     {
         private static readonly Dictionary<Type, object> _services = new Dictionary<Type, object>();
+        private static readonly HashSet<Type> _singletonTypes = new HashSet<Type>();
 
         public void Register<T>() where T : class, new()
         {
+            if (_services.ContainsKey(typeof(T)))
+            {
+                return; // Skip registration if already registered as a singleton
+            }
+
             var instance = new T();
             _services[typeof(T)] = instance;
             InjectMethods(instance);

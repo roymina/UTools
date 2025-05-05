@@ -10,8 +10,6 @@
 //-----------------------------------------------------------------------
 
 using UnityEngine;
-using UnityEngine.SceneManagement;
-
 namespace UTools
 {
     public abstract class UDIInstallerBase : MonoBehaviour
@@ -19,6 +17,7 @@ namespace UTools
         protected static readonly UDIContainer Container = new UDIContainer();
 
         protected abstract void RegisterServices();
+
 
         private void Awake()
         {
