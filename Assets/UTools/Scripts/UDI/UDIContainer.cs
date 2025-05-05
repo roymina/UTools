@@ -86,6 +86,21 @@ namespace UTools
                 InjectMethods(obj);
             }
         }
+
+        /// <summary>
+        /// Injects dependencies into all MonoBehaviour components of a GameObject.
+        /// </summary>
+        /// <param name="gameObject">The GameObject whose components will be injected.</param>
+        public void InjectDependencies(GameObject gameObject)
+        {
+            var components = gameObject.GetComponents<MonoBehaviour>();
+            foreach (var component in components)
+            {
+                InjectFields(component);
+                InjectMethods(component);
+            }
+        }
+
         private void InjectFields(MonoBehaviour obj)
         {
             var fields = obj.GetType().GetFields(BindingFlags.NonPublic | BindingFlags.Instance)

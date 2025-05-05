@@ -1,4 +1,5 @@
 using TMPro;
+using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using UTools;
@@ -9,7 +10,9 @@ public class _TestInjection : UBehaviour
 
     [Child] TextMeshProUGUI txtServiceInejction;
     [Child] TextMeshProUGUI txtMonoInejction;
-    [Child] Button btnLoadNewLevel;
+    [Child] Button btnLoadNewLevel, btnInstantiateButton;
+    [SerializeField]
+    GameObject InjectedButton;
     void Start()
     {
         txtServiceInejction.text = _testService.SayHello();
@@ -17,6 +20,11 @@ public class _TestInjection : UBehaviour
         btnLoadNewLevel.onClick.AddListener(() =>
         {
             SceneManager.LoadScene("_TestDINewScene");
+        });
+        btnInstantiateButton.onClick.AddListener(() =>
+        {
+            var go = UGameObjectFactory.InstantiateWithDependency(
+                InjectedButton, btnInstantiateButton.transform.parent);
         });
     }
 
