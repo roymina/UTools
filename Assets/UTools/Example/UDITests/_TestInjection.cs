@@ -1,32 +1,42 @@
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using UTools;
-public class _TestInjection : UBehaviour
+namespace UTools.Example
 {
-    [Inject] _TestServiceA _testService;
-    [Inject] _TestMono _testMono;
-
-    [Child] TextMeshProUGUI txtServiceInejction;
-    [Child] TextMeshProUGUI txtMonoInejction;
-    [Child] Button btnLoadNewLevel, btnInstantiateButton;
-    [SerializeField]
-    GameObject InjectedButton;
-    void Start()
+    public class _TestInjection : UBehaviour
     {
-        txtServiceInejction.text = _testService.SayHello();
-        txtMonoInejction.text = _testMono.SayHello();
-        btnLoadNewLevel.onClick.AddListener(() =>
+        [Inject] _TestServiceA _testServiceA;
+        [Inject] _TestServiceC _testServiceC;
+        [Inject] _TestMono _testMono;
+
+        [Child] TextMeshProUGUI txtServiceInjection, txtNestedInjection, txtPostInjection, txtMonoInjection;
+        [Child] Button btnLoadNewLevel, btnInstantiateButton;
+        [SerializeField] GameObject InjectedButton;
+        void Start()
         {
-            SceneManager.LoadScene("_TestDINewScene");
-        });
-        btnInstantiateButton.onClick.AddListener(() =>
-        {
-            var go = UGameObjectFactory.InstantiateWithDependency(
-                InjectedButton, btnInstantiateButton.transform.parent);
-        });
+            txtServiceInjection.text = _testServiceA.SayHello();
+
+            txtMonoInjection.text = _testMono.SayHello();
+
+            txtNestedInjection.text = _testServiceA.TestServiceB.SayHello();
+
+            txtPostInjection.text = _testServiceC.Message;
+
+
+            btnLoadNewLevel.onClick.AddListener(() =>
+            {
+                SceneManager.LoadScene("_TestDINewScene");
+            });
+            btnInstantiateButton.onClick.AddListener(() =>
+            {
+                var go = UGameObjectFactory.InstantiateWithDependency(
+                    InjectedButton, btnInstantiateButton.transform.parent);
+            });
+        }
+
+
     }
-
-
 }

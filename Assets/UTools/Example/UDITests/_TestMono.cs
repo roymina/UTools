@@ -1,11 +1,13 @@
 using UnityEngine;
-
-public class _TestMono : MonoBehaviour
+namespace UTools.Example
 {
-    public string SayHello()
+    public class _TestMono : MonoBehaviour
     {
-        string str = "Hello from Mono Class";
-        Debug.Log(str);
-        return str;
+        public string SayHello()
+        {
+            string str = "Hello from Mono Class";
+            Debug.Log(str);
+            return str;
+        }
     }
 }

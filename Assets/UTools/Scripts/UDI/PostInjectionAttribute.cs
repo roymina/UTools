@@ -14,7 +14,7 @@ using System;
 namespace UTools
 {
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-    public class PostConstructAttribute : Attribute
+    public class PostInjectionAttribute : Attribute
     {
     }
 }

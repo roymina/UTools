@@ -5,7 +5,7 @@
 // <author>Roy</author>
 // <date>2025-02-07</date>
 // <summary>
-// Attribute to mark fields or methods for dependency injection.
+// Attribute to mark fields, properties, or methods for dependency injection.
 // </summary>
 //-----------------------------------------------------------------------
 
@@ -13,7 +13,7 @@ using System;
 
 namespace UTools
 {
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Method)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Method | AttributeTargets.Property)]
     public class InjectAttribute : Attribute
     {
     }

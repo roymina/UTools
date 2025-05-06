@@ -1,12 +1,13 @@
 using UTools;
-
-public class _TestInstaller : UDIInstallerBase
+namespace UTools.Example
 {
-    protected override void RegisterServices()
+    public class _TestInstaller : UDIInstallerBase
     {
-        Container.Register<_TestServiceA>();
-        Container.Register<_TestMono>();
+        protected override void RegisterServices()
+        {
+            Container.Register<_TestServiceA>();
+            Container.Register<_TestServiceC>();
+            Container.Register<_TestMono>();
+        }
     }
-
-
 }
