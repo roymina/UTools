@@ -21,6 +21,9 @@ namespace UTools
 
         private void Awake()
         {
+            // 设置全局容器引用，供 UGameObjectFactory 使用
+            UGameObjectFactory.SetContainer(Container);
+
             //execute methods in inherited classes
             RegisterServices();
             InjectAll();

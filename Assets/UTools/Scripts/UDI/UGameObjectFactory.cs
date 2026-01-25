@@ -4,7 +4,28 @@ namespace UTools
 {
     public static class UGameObjectFactory
     {
-        private static readonly UDIContainer Container = new UDIContainer();
+        private static UDIContainer _container;
+
+        /// <summary>
+        /// 设置全局容器引用（通常由 UDIInstallerBase 或 UDIContext 调用）
+        /// </summary>
+        public static void SetContainer(UDIContainer container)
+        {
+            _container = container;
+        }
+
+        /// <summary>
+        /// 获取或创建默认容器
+        /// </summary>
+        private static UDIContainer GetContainer()
+        {
+            if (_container == null)
+            {
+                Debug.LogWarning("UGameObjectFactory: 没有设置容器，创建默认容器。建议通过 SetContainer 方法设置容器。");
+                _container = new UDIContainer();
+            }
+            return _container;
+        }
 
         /// <summary>
         /// Instantiates a GameObject and injects dependencies into its components.
@@ -16,7 +37,7 @@ namespace UTools
         public static GameObject InstantiateWithDependency(GameObject original, Vector3 position, Quaternion rotation)
         {
             var instance = Object.Instantiate(original, position, rotation);
-            Container.InjectDependencies(instance);
+            GetContainer().InjectDependencies(instance);
             return instance;
         }
 
@@ -28,7 +49,7 @@ namespace UTools
         public static GameObject InstantiateWithDependency(GameObject original)
         {
             var instance = Object.Instantiate(original);
-            Container.InjectDependencies(instance);
+            GetContainer().InjectDependencies(instance);
             return instance;
         }
 
@@ -40,7 +61,7 @@ namespace UTools
             var instance = Object.Instantiate(original);
             if (instance is GameObject gameObject)
             {
-                Container.InjectDependencies(gameObject);
+                GetContainer().InjectDependencies(gameObject);
             }
             return instance;
         }
@@ -52,7 +73,7 @@ namespace UTools
             var instance = Object.Instantiate(original, parent);
             if (instance is GameObject gameObject)
             {
-                Container.InjectDependencies(gameObject);
+                GetContainer().InjectDependencies(gameObject);
             }
             return instance;
         }
@@ -62,7 +83,7 @@ namespace UTools
             var instance = Object.Instantiate(original, parent, worldPositionStays);
             if (instance is GameObject gameObject)
             {
-                Container.InjectDependencies(gameObject);
+                GetContainer().InjectDependencies(gameObject);
             }
             return instance;
         }
@@ -72,7 +93,7 @@ namespace UTools
             var instance = Object.Instantiate(original, position, rotation);
             if (instance is GameObject gameObject)
             {
-                Container.InjectDependencies(gameObject);
+                GetContainer().InjectDependencies(gameObject);
             }
             return instance;
         }
@@ -84,7 +105,7 @@ namespace UTools
             var instance = Object.Instantiate(original, position, rotation, parent);
             if (instance is GameObject gameObject)
             {
-                Container.InjectDependencies(gameObject);
+                GetContainer().InjectDependencies(gameObject);
             }
             return instance;
         }

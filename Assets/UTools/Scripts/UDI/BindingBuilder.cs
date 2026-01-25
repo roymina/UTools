@@ -118,13 +118,13 @@ namespace UTools
             return this;
         }
 
-        public new IBindingBuilder<TContract> OnInstantiated(Action<TContract> action)
+        public IBindingBuilder<TContract> OnInstantiated(Action<TContract> action)
         {
             base.OnInstantiated(obj => action((TContract)obj));
             return this;
         }
 
-        public new IBindingBuilder<TContract> FromInstance(TContract instance)
+        public IBindingBuilder<TContract> FromInstance(TContract instance)
         {
             base.FromInstance(instance);
             return this;

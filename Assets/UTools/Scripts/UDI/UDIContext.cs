@@ -97,4 +97,10 @@ namespace UTools
     {
         public abstract void InstallBindings(UDIContainer container);
     }
+
+    // 安装器接口
+    public interface IInstaller
+    {
+        void InstallBindings(UDIContainer container);
+    }
 }

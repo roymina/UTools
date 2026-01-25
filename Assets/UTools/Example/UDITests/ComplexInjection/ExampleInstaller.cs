@@ -33,15 +33,8 @@ namespace UTools
 
     public class GameManager : IInitializable, ITickable
     {
-        private readonly ILogger _logger;
-        private readonly IDataService _dataService;
-
-        [Inject]
-        public GameManager(ILogger logger, IDataService dataService)
-        {
-            _logger = logger;
-            _dataService = dataService;
-        }
+        [Inject] private ILogger _logger;
+        [Inject] private IDataService _dataService;
 
         public void Initialize()
         {
@@ -72,21 +65,16 @@ namespace UTools
                     .To<DataService>()
                     .AsSingle();
 
-            // 带构造函数注入的服务
+            // 使用字段注入的服务
             container.Bind<GameManager>()
                     .ToSelf()
                     .AsSingle()
                     .NonLazy();
 
-            // 预制体工厂绑定示例
-            // container.BindFactory<MyPrefabComponent>()
-            //         .To<PrefabFactory<MyPrefabComponent>>()
+            // GameObject工厂绑定示例（需要先实现 BindFactory 方法）
+            // container.Bind<IFactory<string, GameObject>>()
+            //         .To<GameObjectFactory>()
             //         .AsSingle();
-
-            // GameObject工厂绑定示例
-            container.BindFactory<string, GameObject>()
-                    .To<GameObjectFactory>()
-                    .AsSingle();
         }
     }
 }

@@ -9,11 +9,14 @@ UTools 是一个轻量级的 Unity 插件，为游戏开发提供基本的工具
 ### 1. 依赖注入 (UDI)
 
 - 轻量级依赖注入系统
-- 支持方法和字段注入
+- 支持字段、属性和方法注入
+- **注意：不支持构造函数注入**
 - 支持 MonoBehaviour 类注入
-- 支持项目范围的依赖注入
+- 支持层级容器和父子容器关系
+- Fluent API 流式绑定配置
+- 生命周期管理接口（IInitializable、ITickable 等）
 - 自动依赖解析
-- 单例管理
+- 单例和瞬态作用域管理
 
 ### 2. 消息中心 (UMessage)
 
@@ -44,21 +47,18 @@ UTools 是一个轻量级的 Unity 插件，为游戏开发提供基本的工具
 
 ### 依赖注入示例
 
-1. 编写一个继承自 `UDIInstallerBase` 的类，并实现 `RegisterGlobalServices()` 和 `RegisterSceneServices()` 方法，分别对应当前场景注入和全局注入
+UDI 提供两种方式来配置依赖注入：
+
+#### 方法 1：使用 UDIInstallerBase（旧方式/简单方式）
+
+1. 创建一个继承自 `UDIInstallerBase` 的类，并实现 `RegisterServices()` 方法。
 
    ```c#
    using UTools;
 
-   public class _TestInstaller : UDIInstallerBase
+   public class GameInstaller : UDIInstallerBase
    {
-       //注册为全局服务
-       protected override void RegisterGlobalServices()
-       {
-           Container.Register<NormalClass>();
-           Container.Register<MonoBehaviourClass>();
-       }
-       //注册为当前场景服务
-       protected override void RegisterSceneServices()
+       protected override void RegisterServices()
        {
            Container.Register<NormalClass>();
            Container.Register<MonoBehaviourClass>();
@@ -66,11 +66,83 @@ UTools 是一个轻量级的 Unity 插件，为游戏开发提供基本的工具
    }
    ```
 
-   > 对于全局注册的服务，加载新场景后，注入的类仍然存在，不会被销毁。
-   >
-   > 如果场景中已经存在 MonoBehaviour 类，将自动找到并注册该类。否则，将创建一个同名的新对象并挂载该类。
+   > **跨场景服务：** `UDIInstallerBase` 使用静态容器，所有注册的服务默认为跨场景服务。这意味着加载新场景后，已注册的服务仍然存在。如果 MonoBehaviour 服务需要在场景切换后保留，系统会自动调用 `DontDestroyOnLoad`。
+   > 
+   > 如果场景中已经存在 MonoBehaviour 类，将自动找到并注册该类。否则，将创建一个新的 GameObject 并挂载该类。
 
-2. 使用 [Inject] 特性在任何类中注入服务。
+#### 方法 2：使用 UDIContext 和安装器（推荐）
+
+1. 创建一个继承自 `MonoInstaller` 或 `ScriptableObjectInstaller` 的安装器类：
+
+   ```c#
+   using UTools;
+
+   public class GameInstaller : MonoInstaller
+   {
+       public override void InstallBindings(UDIContainer container)
+       {
+           // 基本服务绑定
+           container.Bind<ILogger>()
+                   .To<UnityLogger>()
+                   .AsSingle();
+
+           container.Bind<IDataService>()
+                   .To<DataService>()
+                   .AsSingle();
+
+           // 使用 NonLazy 立即实例化
+           container.Bind<GameManager>()
+                   .ToSelf()
+                   .AsSingle()
+                   .NonLazy();
+       }
+   }
+   ```
+
+2. 在场景中的 GameObject 上添加 `UDIContext` 组件，并将安装器附加到它上面。
+
+   **跨场景服务（使用 UDIContext）：**
+   
+   如果需要跨场景的全局服务，在 `UDIContext` 所在的 GameObject 上添加一个脚本来保持它不被销毁：
+   
+   ```c#
+   using UnityEngine;
+   using UTools;
+   
+   public class GlobalContext : MonoBehaviour
+   {
+       private void Awake()
+       {
+           DontDestroyOnLoad(gameObject);
+       }
+   }
+   ```
+   
+   或者创建一个专门的全局 Context：
+   
+   ```c#
+   public class ProjectContext : UDIContext
+   {
+       protected override void Awake()
+       {
+           // 确保只有一个实例
+           if (FindObjectsByType<ProjectContext>(FindObjectsSortMode.None).Length > 1)
+           {
+               Destroy(gameObject);
+               return;
+           }
+           
+           DontDestroyOnLoad(gameObject);
+           base.Awake();
+       }
+   }
+   ```
+   
+   这样，新场景的 `UDIContext` 可以自动继承全局 Context 的服务（通过父容器机制）。
+
+#### 使用依赖注入
+
+2. 使用 `[Inject]` 特性在任何类中注入服务。
 
    ```c#
    using UTools;
@@ -78,15 +150,16 @@ UTools 是一个轻量级的 Unity 插件，为游戏开发提供基本的工具
    {
        [Inject] NormalClass normalClass;
        [Inject] MonoBehaviourClass monoBehaviourClass;
+       
        void Start()
        {
-         normalClass.DoSomthing();
-         monoBehaviourClass.DoSomthing();
+           normalClass.DoSomething();
+           monoBehaviourClass.DoSomething();
        }
    }
    ```
 
-3. 你也可以在任何方法上使用 `[Inject]` 特性，依赖项将作为参数注入到该类中
+3. 你也可以在方法和属性上使用 `[Inject]` 特性。依赖项将作为参数或属性值注入。
 
    ```c#
    public class TestServiceA
@@ -96,10 +169,45 @@ UTools 是一个轻量级的 Unity 插件，为游戏开发提供基本的工具
        {
            testServiceB.SayHello();
        }
+       
+       [Inject]
+       public ILogger Logger { get; set; }
    }
    ```
 
-   > 注意，在上面的示例中，`TestServiceB` 将被自动注册，无需使用 `Container.Register()` 方法进行注册。
+   > **重要：** 不支持构造函数注入。请使用字段、属性或方法注入。
+   > 
+   > 注意：在上面的示例中，如果 `TestServiceB` 尚未注册，它将被自动解析和注册。
+
+#### 生命周期接口
+
+UDI 通过接口支持生命周期管理：
+
+- `IInitializable` - 在所有依赖注入完成后调用一次
+- `ITickable` - 每帧调用（Update）
+- `ILateTickable` - 每帧调用（LateUpdate）
+- `IFixedTickable` - 每个固定帧调用（FixedUpdate）
+- `IUDisposable` - 当上下文销毁时调用
+- `IPausable` - 支持暂停/恢复功能
+
+示例：
+
+```c#
+public class GameManager : IInitializable, ITickable
+{
+    [Inject] private ILogger _logger;
+    
+    public void Initialize()
+    {
+        _logger.Log("GameManager initialized");
+    }
+    
+    public void Tick()
+    {
+        // 每帧调用
+    }
+}
+```
 
 ### 消息中心示例
 

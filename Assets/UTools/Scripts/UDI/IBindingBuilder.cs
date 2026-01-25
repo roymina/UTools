@@ -25,8 +25,8 @@ namespace UTools
         new IBindingBuilder<TContract> AsSingle();
         new IBindingBuilder<TContract> AsTransient();
         new IBindingBuilder<TContract> InScope(BindingScope scope);
-        new IBindingBuilder<TContract> OnInstantiated(Action<TContract> action);
-        new IBindingBuilder<TContract> FromInstance(TContract instance);
+        IBindingBuilder<TContract> OnInstantiated(Action<TContract> action);
+        IBindingBuilder<TContract> FromInstance(TContract instance);
         new IBindingBuilder<TContract> NonLazy();
     }
 }

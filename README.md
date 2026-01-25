@@ -9,11 +9,14 @@ UTools is a lightweight Unity plugin that provides essential tools and patterns 
 ### 1. Dependency Injection (UDI)
 
 - Lightweight dependency injection system
-- Supports method and field injection
+- Supports field, property, and method injection
+- **Note: Constructor injection is NOT supported**
 - Supports MonoBehaviour class injection
-- Project-wide dependency injection support
+- Hierarchical container support with parent-child relationships
+- Fluent API for binding configuration
+- Lifecycle management interfaces (IInitializable, ITickable, etc.)
 - Automatic dependency resolution
-- Singleton management
+- Singleton and transient scope management
 
 ### 2. Message Center (UMessage)
 
@@ -44,21 +47,18 @@ UTools is a lightweight Unity plugin that provides essential tools and patterns 
 
 ### Dependency Injection Example
 
-1. Write a class that inherits from `UDIInstallerBase` and implement the `RegisterGlobalServices()` and `RegisterSceneServices()` methods for global and scene-specific injection, respectively.
+UDI provides two ways to configure dependency injection:
+
+#### Method 1: Using UDIInstallerBase (Legacy/Simple Approach)
+
+1. Create a class that inherits from `UDIInstallerBase` and implement the `RegisterServices()` method.
 
    ```c#
    using UTools;
 
-   public class _TestInstaller : UDIInstallerBase
+   public class GameInstaller : UDIInstallerBase
    {
-       // Register as global services
-       protected override void RegisterGlobalServices()
-       {
-           Container.Register<NormalClass>();
-           Container.Register<MonoBehaviourClass>();
-       }
-       // Register as scene-specific services
-       protected override void RegisterSceneServices()
+       protected override void RegisterServices()
        {
            Container.Register<NormalClass>();
            Container.Register<MonoBehaviourClass>();
@@ -66,11 +66,83 @@ UTools is a lightweight Unity plugin that provides essential tools and patterns 
    }
    ```
 
-   > For globally registered services, the injected classes remain after loading a new scene and will not be destroyed.
-   >
-   > If a MonoBehaviour class already exists in the scene, it will be automatically found and registered. Otherwise, a new object with the same name will be created and the class will be attached.
+   > **Cross-Scene Services:** `UDIInstallerBase` uses a static container, so all registered services are cross-scene by default. This means registered services persist after loading a new scene. If MonoBehaviour services need to be preserved across scene transitions, the system will automatically call `DontDestroyOnLoad`.
+   > 
+   > If a MonoBehaviour class already exists in the scene, it will be automatically found and registered. Otherwise, a new GameObject will be created with the class attached.
 
-2. Use the [Inject] attribute to inject services into any class.
+#### Method 2: Using UDIContext with Installers (Recommended)
+
+1. Create an installer class that inherits from `MonoInstaller` or `ScriptableObjectInstaller`:
+
+   ```c#
+   using UTools;
+
+   public class GameInstaller : MonoInstaller
+   {
+       public override void InstallBindings(UDIContainer container)
+       {
+           // Basic service binding
+           container.Bind<ILogger>()
+                   .To<UnityLogger>()
+                   .AsSingle();
+
+           container.Bind<IDataService>()
+                   .To<DataService>()
+                   .AsSingle();
+
+           // Bind with NonLazy (instantiate immediately)
+           container.Bind<GameManager>()
+                   .ToSelf()
+                   .AsSingle()
+                   .NonLazy();
+       }
+   }
+   ```
+
+   **Cross-Scene Services (Using UDIContext):**
+   
+   For global services that persist across scenes, add a script to the GameObject containing `UDIContext` to keep it alive:
+   
+   ```c#
+   using UnityEngine;
+   using UTools;
+   
+   public class GlobalContext : MonoBehaviour
+   {
+       private void Awake()
+       {
+           DontDestroyOnLoad(gameObject);
+       }
+   }
+   ```
+   
+   Or create a dedicated global Context:
+   
+   ```c#
+   public class ProjectContext : UDIContext
+   {
+       protected override void Awake()
+       {
+           // Ensure only one instance exists
+           if (FindObjectsByType<ProjectContext>(FindObjectsSortMode.None).Length > 1)
+           {
+               Destroy(gameObject);
+               return;
+           }
+           
+           DontDestroyOnLoad(gameObject);
+           base.Awake();
+       }
+   }
+   ```
+   
+   This way, new scene's `UDIContext` can automatically inherit services from the global Context (through parent container mechanism).
+
+2. Add a `UDIContext` component to a GameObject in your scene and attach the installer to it.
+
+#### Using Dependency Injection
+
+2. Use the `[Inject]` attribute to inject services into any class.
 
    ```c#
    using UTools;
@@ -78,15 +150,16 @@ UTools is a lightweight Unity plugin that provides essential tools and patterns 
    {
        [Inject] NormalClass normalClass;
        [Inject] MonoBehaviourClass monoBehaviourClass;
+       
        void Start()
        {
-         normalClass.DoSomthing();
-         monoBehaviourClass.DoSomthing();
+           normalClass.DoSomething();
+           monoBehaviourClass.DoSomething();
        }
    }
    ```
 
-3. You can also use the `[Inject]` attribute on any method, and dependencies will be injected as parameters into the class.
+3. You can also use the `[Inject]` attribute on methods and properties. Dependencies will be injected as parameters or property values.
 
    ```c#
    public class TestServiceA
@@ -96,10 +169,45 @@ UTools is a lightweight Unity plugin that provides essential tools and patterns 
        {
            testServiceB.SayHello();
        }
+       
+       [Inject]
+       public ILogger Logger { get; set; }
    }
    ```
 
-   > Note that in the above example, `TestServiceB` will be automatically registered without needing to use the `Container.Register()` method.
+   > **Important:** Constructor injection is NOT supported. Use field, property, or method injection instead.
+   > 
+   > Note: In the above example, `TestServiceB` will be automatically resolved and registered if not already registered.
+
+#### Lifecycle Interfaces
+
+UDI supports lifecycle management through interfaces:
+
+- `IInitializable` - Called once after all dependencies are injected
+- `ITickable` - Called every frame (Update)
+- `ILateTickable` - Called every frame (LateUpdate)
+- `IFixedTickable` - Called every fixed frame (FixedUpdate)
+- `IUDisposable` - Called when the context is destroyed
+- `IPausable` - Supports Pause/Resume functionality
+
+Example:
+
+```c#
+public class GameManager : IInitializable, ITickable
+{
+    [Inject] private ILogger _logger;
+    
+    public void Initialize()
+    {
+        _logger.Log("GameManager initialized");
+    }
+    
+    public void Tick()
+    {
+        // Called every frame
+    }
+}
+```
 
 ### Message Center Example
 

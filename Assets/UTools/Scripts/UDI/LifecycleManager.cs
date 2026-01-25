@@ -10,7 +10,7 @@ namespace UTools
         private readonly List<ITickable> _tickables = new List<ITickable>();
         private readonly List<IFixedTickable> _fixedTickables = new List<IFixedTickable>();
         private readonly List<ILateTickable> _lateTickables = new List<ILateTickable>();
-        private readonly List<IDisposable> _disposables = new List<IDisposable>();
+        private readonly List<IUDisposable> _disposables = new List<IUDisposable>();
         private readonly List<IPausable> _pausables = new List<IPausable>();
 
         private bool _isPaused;
@@ -31,7 +31,7 @@ namespace UTools
             if (instance is ILateTickable lateTickable)
                 _lateTickables.Add(lateTickable);
 
-            if (instance is IDisposable disposable)
+            if (instance is IUDisposable disposable)
                 _disposables.Add(disposable);
 
             if (instance is IPausable pausable)
@@ -54,7 +54,7 @@ namespace UTools
             if (instance is ILateTickable lateTickable)
                 _lateTickables.Remove(lateTickable);
 
-            if (instance is IDisposable disposable)
+            if (instance is IUDisposable disposable)
                 _disposables.Remove(disposable);
 
             if (instance is IPausable pausable)

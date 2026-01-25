@@ -18,8 +18,120 @@ namespace UTools
 {
     public class UDIContainer
     {
-        private static readonly Dictionary<Type, object> _services = new Dictionary<Type, object>();
-        private static readonly HashSet<Type> _singletonTypes = new HashSet<Type>();
+        private readonly Dictionary<Type, object> _services = new Dictionary<Type, object>();
+        private readonly Dictionary<Type, BindInfo> _bindings = new Dictionary<Type, BindInfo>();
+        private readonly HashSet<Type> _singletonTypes = new HashSet<Type>();
+        private readonly UDIContainer _parentContainer;
+
+        public UDIContainer(UDIContainer parentContainer = null)
+        {
+            _parentContainer = parentContainer;
+        }
+
+        #region Fluent Binding API
+
+        /// <summary>
+        /// 开始一个新的绑定配置（Fluent API）
+        /// </summary>
+        public IBindingBuilder<T> Bind<T>()
+        {
+            var bindInfo = new BindInfo
+            {
+                ContractType = typeof(T),
+                ConcreteType = typeof(T),
+                Scope = BindingScope.Singleton
+            };
+
+            _bindings[typeof(T)] = bindInfo;
+            return new BindingBuilder<T>(bindInfo, this);
+        }
+
+        /// <summary>
+        /// 绑定接口到实现类型
+        /// </summary>
+        public IBindingBuilder<TContract> Bind<TContract, TImplementation>()
+            where TImplementation : class, TContract
+        {
+            var bindInfo = new BindInfo
+            {
+                ContractType = typeof(TContract),
+                ConcreteType = typeof(TImplementation),
+                Scope = BindingScope.Singleton
+            };
+
+            _bindings[typeof(TContract)] = bindInfo;
+            return new BindingBuilder<TContract>(bindInfo, this);
+        }
+
+        /// <summary>
+        /// 完成绑定并创建实例（如果需要）
+        /// </summary>
+        internal void FinalizeBinding(BindInfo bindInfo)
+        {
+            if (bindInfo.Instance != null)
+            {
+                // 已有实例，直接注册
+                _services[bindInfo.ContractType] = bindInfo.Instance;
+                if (bindInfo.Scope == BindingScope.Singleton)
+                {
+                    _singletonTypes.Add(bindInfo.ContractType);
+                }
+                return;
+            }
+
+            if (bindInfo.NonLazy)
+            {
+                // NonLazy 模式，立即创建实例
+                var instance = CreateInstance(bindInfo);
+                _services[bindInfo.ContractType] = instance;
+            }
+        }
+
+        private object CreateInstance(BindInfo bindInfo)
+        {
+            var type = bindInfo.ConcreteType ?? bindInfo.ContractType;
+
+            if (typeof(MonoBehaviour).IsAssignableFrom(type))
+            {
+                return CreateMonoBehaviourInstance(type, bindInfo.GameObjectContext);
+            }
+
+            var instance = Activator.CreateInstance(type);
+            InjectDependenciesIntoInstance(instance);
+            ExecutePostConstructMethods(instance);
+            return instance;
+        }
+
+        private object CreateMonoBehaviourInstance(Type type, GameObject contextObject = null)
+        {
+            // 首先尝试查找场景中已存在的实例
+            var existingInstance = UnityEngine.Object.FindFirstObjectByType(type);
+            if (existingInstance != null)
+            {
+                return existingInstance;
+            }
+
+            // 如果提供了上下文GameObject，在其上添加组件
+            if (contextObject != null)
+            {
+                var component = contextObject.AddComponent(type);
+                InjectDependenciesIntoInstance(component);
+                ExecutePostConstructMethods(component);
+                return component;
+            }
+
+            // 创建新的GameObject并添加组件
+            Debug.Log($"自动创建类型{type.Name}的MonoBehaviour实例。");
+            GameObject gameObject = new GameObject(type.Name);
+            var newInstance = gameObject.AddComponent(type);
+            InjectDependenciesIntoInstance(newInstance);
+            ExecutePostConstructMethods(newInstance);
+            return newInstance;
+        }
+
+        #endregion
+
+        #region Legacy Registration API
 
         public void Register<T>() where T : class, new()
         {
@@ -35,11 +147,35 @@ namespace UTools
             ExecutePostConstructMethods(instance);
         }
 
+        #endregion
+
+        #region Resolution
+
         public object Resolve(Type type)
         {
+            // 首先检查本容器的绑定
+            if (_bindings.TryGetValue(type, out var bindInfo))
+            {
+                return ResolveFromBinding(bindInfo);
+            }
+
+            // 检查本容器的服务
             if (_services.TryGetValue(type, out var service))
             {
                 return service;
+            }
+
+            // 尝试从父容器解析
+            if (_parentContainer != null)
+            {
+                try
+                {
+                    return _parentContainer.Resolve(type);
+                }
+                catch
+                {
+                    // 父容器没有，继续在本容器创建
+                }
             }
 
             if (typeof(MonoBehaviour).IsAssignableFrom(type))
@@ -69,6 +205,38 @@ namespace UTools
             }
 
             return RegisterAndResolve(type);
+        }
+
+        private object ResolveFromBinding(BindInfo bindInfo)
+        {
+            // 如果已有实例且是单例，返回该实例
+            if (bindInfo.Instance != null && bindInfo.Scope == BindingScope.Singleton)
+            {
+                return bindInfo.Instance;
+            }
+
+            // 检查缓存的服务
+            if (bindInfo.Scope == BindingScope.Singleton && _services.TryGetValue(bindInfo.ContractType, out var cached))
+            {
+                return cached;
+            }
+
+            // 创建新实例
+            var instance = CreateInstance(bindInfo);
+
+            // 如果是单例，缓存实例
+            if (bindInfo.Scope == BindingScope.Singleton)
+            {
+                _services[bindInfo.ContractType] = instance;
+                bindInfo.Instance = instance;
+            }
+
+            return instance;
+        }
+
+        public T Resolve<T>()
+        {
+            return (T)Resolve(typeof(T));
         }
 
         private object RegisterAndResolve(Type type)
@@ -130,6 +298,30 @@ namespace UTools
                 ExecutePostConstructMethods(component);
             }
         }
+
+        /// <summary>
+        /// Injects dependencies into a GameObject and all its children recursively.
+        /// </summary>
+        /// <param name="gameObject">The GameObject whose components (and children's components) will be injected.</param>
+        public void InjectGameObject(GameObject gameObject)
+        {
+            if (gameObject == null) return;
+
+            // 注入当前 GameObject 的所有组件
+            var components = gameObject.GetComponentsInChildren<MonoBehaviour>(true);
+            foreach (var component in components)
+            {
+                if (component != null)
+                {
+                    InjectDependenciesIntoInstance(component);
+                    ExecutePostConstructMethods(component);
+                }
+            }
+        }
+
+        #endregion
+
+        #region Field/Property/Method Injection
 
         /// <summary>
         /// Injects dependencies into fields marked with [Inject] attribute.
@@ -206,5 +398,7 @@ namespace UTools
                 method.Invoke(obj, parameters);
             }
         }
+
+        #endregion
     }
 }
