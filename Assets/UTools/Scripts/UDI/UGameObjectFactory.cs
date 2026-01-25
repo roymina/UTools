@@ -45,7 +45,7 @@ namespace UTools
             return instance;
         }
 
- 
+
 
         public static T InstantiateWithDependency<T>(T original, Transform parent) where T : Object
         {
@@ -77,7 +77,7 @@ namespace UTools
             return instance;
         }
 
- 
+
 
         public static T InstantiateWithDependency<T>(T original, Vector3 position, Quaternion rotation, Transform parent) where T : Object
         {
