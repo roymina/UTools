@@ -8,13 +8,13 @@ namespace UTools.Example
 {
     public class _TestInjection : UBehaviour
     {
-        [Inject] _TestServiceA _testServiceA;
-        [Inject] _TestServiceC _testServiceC;
-        [Inject] _TestMono _testMono;
+        [Inject] _TestServiceA _testServiceA = null;
+        [Inject] _TestServiceC _testServiceC = null;
+        [Inject] _TestMono _testMono = null;
 
-        [Child] TextMeshProUGUI txtServiceInjection, txtNestedInjection, txtPostInjection, txtMonoInjection;
-        [Child] Button btnLoadNewLevel, btnInstantiateButton;
-        [SerializeField] GameObject InjectedButton;
+        [Child] TextMeshProUGUI txtServiceInjection = null, txtNestedInjection = null, txtPostInjection = null, txtMonoInjection = null;
+        [Child] Button btnLoadNewLevel = null, btnInstantiateButton = null;
+        [SerializeField] GameObject InjectedButton = null;
         void Start()
         {
             txtServiceInjection.text = _testServiceA.SayHello();

@@ -1,29 +1,22 @@
-//-----------------------------------------------------------------------
-// <copyright file="ButtonAttribute.cs" company="DxTech Co. Ltd.">
-//     Copyright (c) DxTech Co. Ltd. All rights reserved.
-// </copyright>
-// <author>Roy</author>
-// <date>2025-02-07</date>
-// <summary>
-// Attribute for adding buttons to the Unity Inspector and a custom editor to render them.
-// </summary>
-//-----------------------------------------------------------------------
-
-using UnityEngine;
 using System;
+using UnityEngine;
 #if UNITY_EDITOR
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using UnityEditor;
 #endif
 
 namespace UTools
 {
-    // Defines the ButtonAttribute
     [AttributeUsage(AttributeTargets.Method)]
     public class ButtonAttribute : PropertyAttribute
     {
         public readonly string ButtonName;
 
-        public ButtonAttribute() : this(null) { }
+        public ButtonAttribute() : this(null)
+        {
+        }
 
         public ButtonAttribute(string buttonName)
         {
@@ -32,40 +25,51 @@ namespace UTools
     }
 
 #if UNITY_EDITOR
-    // Custom editor drawer for ButtonAttribute
-    [CustomEditor(typeof(MonoBehaviour), true)]
-    public class ButtonAttributeEditor : Editor
+    [CustomEditor(typeof(MonoBehaviour), true, isFallback = true)]
+    [CanEditMultipleObjects]
+    public class ButtonAttributeEditor : UnityEditor.Editor
     {
+        private static readonly Dictionary<Type, MethodInfo[]> CachedMethods = new();
+
         public override void OnInspectorGUI()
         {
             base.OnInspectorGUI();
 
-            // Retrieves all methods of the current script
-            var methods = target.GetType().GetMethods(
-                System.Reflection.BindingFlags.Instance |
-                System.Reflection.BindingFlags.Static |
-                System.Reflection.BindingFlags.Public |
-                System.Reflection.BindingFlags.NonPublic);
-
-            foreach (var method in methods)
+            foreach (MethodInfo method in GetButtonMethods(target.GetType()))
             {
-                // Checks if a method has the ButtonAttribute
-                var buttonAttribute = (ButtonAttribute)Attribute.GetCustomAttribute(
-                    method, typeof(ButtonAttribute));
+                ButtonAttribute buttonAttribute = method.GetCustomAttribute<ButtonAttribute>();
+                string buttonName = string.IsNullOrEmpty(buttonAttribute.ButtonName)
+                    ? ObjectNames.NicifyVariableName(method.Name)
+                    : buttonAttribute.ButtonName;
 
-                if (buttonAttribute != null)
+                if (GUILayout.Button(buttonName))
                 {
-                    // Creates a button and invokes the method when clicked
-                    string buttonName = string.IsNullOrEmpty(buttonAttribute.ButtonName)
-                        ? method.Name
-                        : buttonAttribute.ButtonName;
-
-                    if (GUILayout.Button(buttonName))
+                    foreach (UnityEngine.Object currentTarget in targets)
                     {
-                        method.Invoke(target, null);
+                        try
+                        {
+                            method.Invoke(currentTarget, null);
+                        }
+                        catch (Exception exception)
+                        {
+                            Debug.LogException(exception);
+                        }
                     }
                 }
             }
+        }
+
+        private static MethodInfo[] GetButtonMethods(Type type)
+        {
+            if (!CachedMethods.TryGetValue(type, out MethodInfo[] methods))
+            {
+                methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                    .Where(method => method.GetCustomAttribute<ButtonAttribute>() != null && method.GetParameters().Length == 0)
+                    .ToArray();
+                CachedMethods[type] = methods;
+            }
+
+            return methods;
         }
     }
 #endif

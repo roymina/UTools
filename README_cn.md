@@ -2,326 +2,266 @@
 
 # UTools
 
-UTools 是一个轻量级的 Unity 插件，为游戏开发提供基本的工具和模式。它包含依赖注入、消息中心、GameObject/Component 查找器以及各种实用功能，以简化您的 Unity 开发工作流程。UTools 没有任何第三方依赖。
+UTools 是一个轻量级 Unity 工具集，覆盖依赖注入、消息系统、对象查找和常用运行时辅助能力。它的目标是保持体积小、项目内可直接使用，同时方便整理成可复用插件。
 
-## 功能特性
+## 模块说明
 
-### 1. 依赖注入 (UDI)
+### UDI
 
-- 轻量级依赖注入系统
-- 支持字段、属性和方法注入
-- **注意：不支持构造函数注入**
-- 支持 MonoBehaviour 类注入
-- 支持层级容器和父子容器关系
-- Fluent API 流式绑定配置
-- 生命周期管理接口（IInitializable、ITickable 等）
-- 自动依赖解析
-- 单例和瞬态作用域管理
+- 通过 `[Inject]` 支持字段、属性、方法注入
+- 通过 `UDIContext` 支持场景级和层级容器
+- 支持运行时生命周期接口：`IInitializable`、`ITickable`、`ILateTickable`、`IFixedTickable`、`IUDisposable`、`IPausable`
+- 支持 `NonLazy()`
+- 支持 `TryResolve<T>()` / `TryResolve(Type, out object)`
+- 支持场景对象和实例化预制体上的 `MonoBehaviour` 注入
 
-### 2. 消息中心 (UMessage)
+说明：
 
-- 事件驱动的通信系统
-- 类型安全的消息传递
-- 订阅/取消订阅机制
-- 全局和作用域事件处理
+- 不支持构造函数注入。
+- `UDIInstallerBase` 仍保留用于兼容旧场景，但已经是旧入口。
+- `WithId`、自定义 `Scoped` 语义、按标识符解析等高级能力不是当前推荐 API。
 
-### 3. GameObject/Component/Resource 查找器 (UFind)
+### UMessage
 
-- 基于层级的对象查找
-- 基于属性的对象查找
-- Resource 资源自动载入
-- 组件缓存以提升性能
-- 类型安全的组件访问
+- 强类型发布 / 订阅
+- 支持可释放的订阅句柄
+- 支持“先发布、后订阅”的待处理消息回放
+- 会自动清理已经销毁的 `UnityEngine.Object` 订阅目标
 
-### 4. 实用功能 (UUtilis)
+### UFind
 
-- 常用 Unity 操作
+- `[Child]` 子对象查找
+- `[Comp]` 当前对象组件查找
+- `[Resource]` 资源自动加载
+- 反射元数据缓存，减少重复启动扫描
+- 支持路径形式的子节点查找，例如 `[Child("Root/Panel/Button")]`
 
-## 安装
+### UUtils
 
-1. 从 Release 页面下载 UTools 包
-2. 将 UTools.unitypackage 导入到您的 Unity 项目中
-3. 即可开始使用！
+- 提供字符串、时间、文件、GameObject、网格、颜色、UI 等扩展方法
+- 持久化目录读写现在会自动创建缺失目录
 
-## 快速入门
+### Editor 辅助
 
-### 依赖注入示例
+- `ButtonAttribute`
+- `ShowIfAttribute`
+- `AutoComponentAttribute`
 
-UDI 提供两种方式来配置依赖注入：
+## 安装方式
 
-#### 方法 1：使用 UDIInstallerBase（旧方式/简单方式）
+### 方式 1：直接导入源码 / 包目录
 
-1. 创建一个继承自 `UDIInstallerBase` 的类，并实现 `RegisterServices()` 方法。
+将 `Assets/UTools` 下的内容导入你的 Unity 项目。
 
-   ```c#
-   using UTools;
+### 方式 2：使用 `unitypackage`
 
-   public class GameInstaller : UDIInstallerBase
-   {
-       protected override void RegisterServices()
-       {
-           Container.Register<NormalClass>();
-           Container.Register<MonoBehaviourClass>();
-       }
-   }
-   ```
+如果你更偏好一次性导入，可以使用打包后的发布文件。
 
-   > **跨场景服务：** `UDIInstallerBase` 使用静态容器，所有注册的服务默认为跨场景服务。这意味着加载新场景后，已注册的服务仍然存在。如果 MonoBehaviour 服务需要在场景切换后保留，系统会自动调用 `DontDestroyOnLoad`。
-   > 
-   > 如果场景中已经存在 MonoBehaviour 类，将自动找到并注册该类。否则，将创建一个新的 GameObject 并挂载该类。
+### 方式 3：本地包工作流
 
-#### 方法 2：使用 UDIContext 和安装器（推荐）
+仓库已经补齐了面向包化的基础元数据，位于 `Assets/UTools`：
 
-1. 创建一个继承自 `MonoInstaller` 或 `ScriptableObjectInstaller` 的安装器类：
+- `package.json`
+- `Documentation~/`
+- `Samples~/`
+- `CHANGELOG.md`
+- 运行时、编辑器、示例、测试对应的 `asmdef`
 
-   ```c#
-   using UTools;
+## 推荐接入方式
 
-   public class GameInstaller : MonoInstaller
-   {
-       public override void InstallBindings(UDIContainer container)
-       {
-           // 基本服务绑定
-           container.Bind<ILogger>()
-                   .To<UnityLogger>()
-                   .AsSingle();
+推荐入口是 `UDIContext`。
 
-           container.Bind<IDataService>()
-                   .To<DataService>()
-                   .AsSingle();
+1. 在场景根节点添加 `UDIContext`
+2. 绑定一个或多个 `MonoInstaller` / `ScriptableObjectInstaller`
+3. 在 `InstallBindings` 中注册服务
+4. 在运行时脚本中通过 `[Inject]` 获取依赖
 
-           // 使用 NonLazy 立即实例化
-           container.Bind<GameManager>()
-                   .ToSelf()
-                   .AsSingle()
-                   .NonLazy();
-       }
-   }
-   ```
+```csharp
+using UTools;
+using UnityEngine;
 
-2. 在场景中的 GameObject 上添加 `UDIContext` 组件，并将安装器附加到它上面。
+public interface ILogger
+{
+    void Log(string message);
+}
 
-   **跨场景服务（使用 UDIContext）：**
-   
-   如果需要跨场景的全局服务，在 `UDIContext` 所在的 GameObject 上添加一个脚本来保持它不被销毁：
-   
-   ```c#
-   using UnityEngine;
-   using UTools;
-   
-   public class GlobalContext : MonoBehaviour
-   {
-       private void Awake()
-       {
-           DontDestroyOnLoad(gameObject);
-       }
-   }
-   ```
-   
-   或者创建一个专门的全局 Context：
-   
-   ```c#
-   public class ProjectContext : UDIContext
-   {
-       protected override void Awake()
-       {
-           // 确保只有一个实例
-           if (FindObjectsByType<ProjectContext>(FindObjectsSortMode.None).Length > 1)
-           {
-               Destroy(gameObject);
-               return;
-           }
-           
-           DontDestroyOnLoad(gameObject);
-           base.Awake();
-       }
-   }
-   ```
-   
-   这样，新场景的 `UDIContext` 可以自动继承全局 Context 的服务（通过父容器机制）。
+public class UnityLogger : ILogger
+{
+    public void Log(string message) => Debug.Log(message);
+}
 
-#### 使用依赖注入
+public class GameInstaller : MonoInstaller
+{
+    public override void InstallBindings(UDIContainer container)
+    {
+        container.Bind<ILogger>()
+            .To<UnityLogger>()
+            .AsSingle();
 
-2. 使用 `[Inject]` 特性在任何类中注入服务。
+        container.Bind<GameManager>()
+            .ToSelf()
+            .AsSingle()
+            .NonLazy();
+    }
+}
+```
 
-   ```c#
-   using UTools;
-   public class TestInjection : MonoBehaviour
-   {
-       [Inject] NormalClass normalClass;
-       [Inject] MonoBehaviourClass monoBehaviourClass;
-       
-       void Start()
-       {
-           normalClass.DoSomething();
-           monoBehaviourClass.DoSomething();
-       }
-   }
-   ```
+```csharp
+using UTools;
 
-3. 你也可以在方法和属性上使用 `[Inject]` 特性。依赖项将作为参数或属性值注入。
-
-   ```c#
-   public class TestServiceA
-   {
-       [Inject]
-       public void InjectServiceB(TestServiceB testServiceB)
-       {
-           testServiceB.SayHello();
-       }
-       
-       [Inject]
-       public ILogger Logger { get; set; }
-   }
-   ```
-
-   > **重要：** 不支持构造函数注入。请使用字段、属性或方法注入。
-   > 
-   > 注意：在上面的示例中，如果 `TestServiceB` 尚未注册，它将被自动解析和注册。
-
-#### 生命周期接口
-
-UDI 通过接口支持生命周期管理：
-
-- `IInitializable` - 在所有依赖注入完成后调用一次
-- `ITickable` - 每帧调用（Update）
-- `ILateTickable` - 每帧调用（LateUpdate）
-- `IFixedTickable` - 每个固定帧调用（FixedUpdate）
-- `IUDisposable` - 当上下文销毁时调用
-- `IPausable` - 支持暂停/恢复功能
-
-示例：
-
-```c#
 public class GameManager : IInitializable, ITickable
 {
     [Inject] private ILogger _logger;
-    
+
     public void Initialize()
     {
         _logger.Log("GameManager initialized");
     }
-    
+
     public void Tick()
     {
-        // 每帧调用
     }
 }
 ```
 
-### 消息中心示例
+## 全局 Context 模式
 
-```c#
-//订阅消息
-UMessageCenter.Instance.Subscribe<MyCustomMessage>(msg =>
-{
-    txtSubscriber1.text = txtSubscriber2.text = txtSubscriber3.text = msg.ToString();
-});
+如果你需要跨场景服务，可以让 Context 所在对象常驻：
 
-//发布消息
-btnPublisher.onClick.AddListener(() =>
+```csharp
+using UnityEngine;
+using UTools;
+
+public class ProjectContext : UDIContext
 {
-    UMessageCenter.Instance.Publish(new MyCustomMessage { Name = "MyCustomMessage" });
-});
+    protected override void Awake()
+    {
+        if (FindObjectsByType<ProjectContext>(FindObjectsSortMode.None).Length > 1)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        DontDestroyOnLoad(gameObject);
+        base.Awake();
+    }
+}
 ```
 
-### GameObject/Component/Resource 查找器示例
+子 Context 可以通过层级关系继承父容器服务。
 
-编写一个继承自 `UBehaviour` 的类，使用`[Child]`标签指定子对象，在游戏启动时脚本会自动查找并缓存该对象。子对象可以是 GameObject 或者 Component。
+## 旧方式
 
-如果 Child 标签未传入任何参数，则会查找和变量名相同名称的子对象。
+`UDIInstallerBase` 仍可用于老场景：
 
-```c#
+```csharp
 using UTools;
-public class TestBehaviour : UBehaviour
-{
-    [Child]
-    public GameObject childObject;
 
-    [Child]
-    public TextMeshProUGUI text;
+public class LegacyInstaller : UDIInstallerBase
+{
+    protected override void RegisterServices()
+    {
+        Container.Register<LegacyService>();
+    }
+}
+```
+
+新代码建议统一迁移到 `UDIContext`。
+
+## 消息系统示例
+
+```csharp
+using UTools;
+
+public class ExampleUsage
+{
+    private IMessageSubscription _subscription;
+
+    public void Enable()
+    {
+        _subscription = UMessageCenter.Instance.Subscribe<MyMessage>(OnMessage);
+    }
+
+    public void Disable()
+    {
+        _subscription?.Dispose();
+        _subscription = null;
+    }
+
+    public void Publish()
+    {
+        UMessageCenter.Instance.Publish(new MyMessage { Text = "Hello" });
+    }
+
+    private void OnMessage(MyMessage message)
+    {
+        UnityEngine.Debug.Log(message.Text);
+    }
 }
 
+public class MyMessage
+{
+    public string Text;
+}
 ```
 
-如果传入参数，则忽略变量名，直接查找指定名称的子对象。
+如果消息在订阅者出现前就已经发布，默认情况下第一个后续订阅者仍会收到待处理消息回放。
 
-```c#
-[Child("someObject")]
-public GameObject childObject;
+## UFind 示例
+
+```csharp
+using TMPro;
+using UnityEngine;
+using UTools;
+
+public class ExampleView : UBehaviour
+{
+    [Comp] public Canvas Canvas;
+    [Child] public TextMeshProUGUI Title;
+    [Child("Root/Buttons/Confirm")] public GameObject ConfirmButton;
+    [Resource("Icons/Logo")] public Sprite Logo;
+}
 ```
 
-使用[Resource]标签指定资源路径，在游戏启动时脚本会自动查找并缓存该资源。
+行为说明：
 
-```c#
-//查找Resources文件夹下的testPrefab资源并作为GameObject载入
-[Resource]
-public GameObject testPrefab;
+- `[Child]` 不传参数时，默认用字段名查找
+- 如果同名子节点出现多个，UTools 会报错并要求改用路径查找
 
-//查找Resources/Prefabs/TestPrefab资源并作为GameObject载入
-[Resource("Prefabs/TestPrefab")]
-public GameObject testPrefab;
+## 带注入的实例化
+
+如果你需要在实例化预制体后完成注入，使用 `UGameObjectFactory`：
+
+```csharp
+var instance = UGameObjectFactory.InstantiateWithDependency(prefab, parentTransform);
 ```
 
-### 实用功能示例
+这会对预制体根节点和其所有子节点上的 `MonoBehaviour` 一并执行注入。
 
-工具类被封装在一个纯静态类中，所有的方法均为扩展方法，在相应类型的实例后面加上`.`即可调出。
+## 测试
 
-#### [通用]
+项目现在已经补齐 Unity Test Framework 测试入口：
 
-1. **Map**：将一个值从一个范围映射到另一个范围，确保该值在原始范围内。
+- `Assets/UTools/Tests/EditMode`
+- `Assets/UTools/Tests/PlayMode`
 
-#### [字符串]
+当前仓库中的自动化验证方式：
 
-1. **IsNullOrEmpty**：检查字符串是否为 null 或为空。
+- `dotnet build utools.sln -nologo`
+- Unity 编辑器内的 EditMode / PlayMode Test Runner
 
-2. **IsNotNullOrEmpty**：检查字符串是否不为 null 且不为空。
-3. **CheckUserName**：检查输入字符串是否仅由字母、数字和下划线组成。
-4. **TrimLength**：将字符串修剪为指定长度，如果被截断则附加省略号。
-5. **CheckStrChinese**：检查输入字符串是否仅由中文字符组成。
-6. **ToBase64String**：将字符串转换为 Base64 字符串。
+## 仓库结构
 
-#### [日期和时间]
+- `Assets/UTools/Scripts`：运行时与编辑器源码
+- `Assets/UTools/Example`：示例场景和示例脚本
+- `Assets/UTools/Tests`：EditMode 与 PlayMode 测试
+- `Assets/UTools/Documentation~`：包内文档
+- `Assets/UTools/Samples~`：包内示例占位目录
 
-1. **ToTimeString**：将整数（秒）转换为时间字符串，支持可选的中文格式和自定义时间格式。
-2. **Tohhmmss**：将 `TimeSpan` 转换为格式化字符串，支持可选的中文格式。
-3. **CalculateTimeSpan**：计算两个时间字符串之间的 `TimeSpan`。
+## 当前状态
 
-#### [GameObject 和组件]
+UTools 已经朝“可复用插件结构”做过一轮重构，但仍保留了部分兼容旧场景的桥接能力。对于新的开发，推荐统一采用下面这套方式：
 
-1. **FindChild**：通过名称查找子 `GameObject`，支持搜索所有后代和模糊搜索。
-2. **GetAllChildren**：检索 `GameObject` 的所有子物体和后代，包括未激活的。
-3. **ExistsChild**：检查是否存在具有指定名称的子 `GameObject`。
-4. **ShowOneChild**：仅显示一个指定的子 `GameObject`，通过名称或索引。
-5. **HideOneChild**：隐藏一个指定的子 `GameObject`，通过名称或索引。
-6. **ToggleAllChildren**：切换所有子 `GameObject` 的可见性。
-7. **ToggleMesh**：切换 `MeshRenderers` 和 `SkinnedMeshRenderers` 的可见性。
-8. **CloneMesh**：克隆 `GameObject` 的网格，支持可选的新材质和名称。
-9. **CombineMesh**：将所有子 `GameObject` 的网格合并为一个网格。
-10. **GetMeshFilterBounds**：计算附加到 `Transform` 的 `MeshFilter` 的边界，支持可选的所有子 `Transform`。
-11. **FindNearestObject**：查找具有类型 `T` 组件的最近 `GameObject`。
-12. **IsActiveAndMeshEnabled**：检查 `GameObject` 是否处于活动状态且其 `MeshRenderer` 是否启用。
-13. **HasComponent**：检查 `GameObject` 是否具有特定组件。
-14. **EnsureComponent**：确保 `GameObject` 具有特定组件，必要时添加。
-15. **GetComponentInSelfThenParent**：从 `GameObject` 或其父级获取组件。
-16. **FindChildByName**：通过名称查找子 `Transform`。
-
-#### [颜色]
-
-1. **ConvertColorToColor32**：将 `Color` 转换为 `Color32`。
-2. **ConvertColor32ToColor**：将 `Color32` 转换为 `Color`。
-
-#### [UI]
-
-1. **ToggleAsCanvasGroup**：切换 `RectTransform` 的可见性作为 `CanvasGroup`，支持补间和交互性。
-2. **ToggleAsCanvasGroupAuto**：自动切换 `RectTransform` 的可见性作为 `CanvasGroup`，支持补间。
-3. **Show (Transform)**：通过设置本地缩放显示或隐藏 `Transform`。
-4. **Show (RectTransform)**：通过设置本地缩放显示或隐藏 `RectTransform`。
-5. **ToSprite**：将 `Texture2D` 转换为 `Sprite`。
-6. **ToTexture2D (Sprite)**：将 `Sprite` 转换为 `Texture2D`。
-7. **ToTexture2D (string)**：将 Base64 字符串转换为 `Texture2D`。
-8. **ToBase64**：将 `Texture2D` 转换为 Base64 字符串。
-9. **ToTexture2D (Texture)**：将 `Texture` 转换为 `Texture2D`。
-10. **DecodeBase64Image**：将 Base64 字符串解码为 `Texture2D`。
-11. **TweenColor**：补间 UI `Image` 的颜色。
-12. **MoveOutOfScreen**：将 UI 元素移出屏幕到指定方向，支持补间。
+- `UDIContext`
+- `MonoInstaller` / `ScriptableObjectInstaller`
+- 使用可释放句柄的强类型 `UMessageCenter` 订阅

@@ -1,13 +1,18 @@
 using UTools;
 namespace UTools.Example
 {
-    public class _TestInstaller : UDIInstallerBase
+    public class _TestInstaller : MonoInstaller
     {
-        protected override void RegisterServices()
+        public override void InstallBindings(UDIContainer container)
         {
-            Container.Register<_TestServiceA>();
-            Container.Register<_TestServiceC>();
-            Container.Register<_TestMono>();
+            container.Bind<_TestServiceA>()
+                .AsSingle();
+
+            container.Bind<_TestServiceC>()
+                .AsSingle();
+
+            container.Bind<_TestMono>()
+                .AsSingle();
         }
     }
 }

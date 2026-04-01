@@ -1,30 +1,5 @@
-//-----------------------------------------------------------------------
-// <copyright file="ChildAttribute.cs" company="DxTech Co. Ltd.">
-//     Copyright (c) DxTech Co. Ltd.. All rights reserved.
-// </copyright>
-// <author>Roy</author>
-// <date>2025-02-07</date>
-/// <summary>
-/// The Highlighter class provides a dynamic blinking highlight effect for game objects.
-/// It adjusts the material's color and emission properties to create a visual effect
-/// that draws attention to the object. The class supports transparent materials and
-/// includes performance optimizations for real-time updates.
-/// 
-/// Key Features:
-/// - Dynamic blinking highlight effect.
-/// - Automatic material initialization and management.
-/// - Support for transparent materials.
-/// - Adjustable emission intensity and blinking speed.
-/// - Performance optimization through update interval control.
-/// 
-/// Usage:
-/// - Call StartHighlight() to begin the highlight effect.
-/// - Call StopHighlight() to end the highlight effect and reset materials.
-/// </summary>
-//-----------------------------------------------------------------------
-using UnityEngine;
 using System.Collections.Generic;
-using System.Linq;
+using UnityEngine;
 
 namespace UTools
 {
@@ -46,229 +21,237 @@ namespace UTools
         [Tooltip("toggle highlight")]
         public bool isHighlighting = false;
 
-        private List<Renderer> renderers = new List<Renderer>();
-        private List<Material> materials = new List<Material>();
-        private List<Color> initialColors = new List<Color>();
-        private List<float> initialAlphaValues = new List<float>();
-        private List<bool> isTransparentMaterial = new List<bool>();
-        private float currentIntensity;
+        private readonly List<RendererBinding> _rendererBindings = new();
+        private int _frameCounter;
+        private bool _materialsInitialized;
 
-
-        private int frameCounter = 0;
-        private Color blinkColor;
-        private bool materialsInitialized = false;
-
-        void Awake()
+        private void Awake()
         {
             InitializeMaterials();
             ResetMaterials();
         }
 
-        void Start()
+        private void Update()
         {
-            // Ensure the initial state is correct
-            ResetMaterials();
-        }
-
-        // Check if the material is transparent
-        private bool IsMaterialTransparent(Material material)
-        {
-            if (material == null) return false;
-
-            // Check rendering mode
-            if (material.HasProperty("_Mode"))
+            if (!isHighlighting || !_materialsInitialized || _rendererBindings.Count == 0)
             {
-                int mode = (int)material.GetFloat("_Mode");
-                // Mode 2=Fade, 3=Transparent
-                return mode == 2 || mode == 3;
-            }
-
-            // Check rendering queue
-            if (material.renderQueue >= 3000)
-                return true;
-
-            // Check keywords
-            if (material.IsKeywordEnabled("_ALPHABLEND_ON") ||
-                material.IsKeywordEnabled("_ALPHAPREMULTIPLY_ON") ||
-                material.IsKeywordEnabled("_SURFACE_TYPE_TRANSPARENT"))
-                return true;
-
-            // Check alpha value of the color
-            if (material.HasProperty("_Color") && material.color.a < 0.99f)
-                return true;
-
-            return false;
-        }
-
-        // Initialize materials, only executed once
-        private void InitializeMaterials()
-        {
-            if (materialsInitialized) return;
-
-            renderers = GetComponentsInChildren<Renderer>().ToList();
-            initialAlphaValues.Clear();
-            isTransparentMaterial.Clear();
-
-            if (renderers.Count == 0)
-            {
-                Debug.LogWarning("No valid renderer components found, unable to apply highlight effect");
                 return;
             }
 
-            // Collect all materials
-            foreach (Renderer renderer in renderers)
+            _frameCounter++;
+            if (_frameCounter < Mathf.Max(1, updateInterval))
             {
-                if (renderer == null) continue;
-
-                Material[] rendererMaterials = renderer.materials;
-                foreach (Material mat in rendererMaterials)
-                {
-                    materials.Add(mat);
-                    bool isTransparent = IsMaterialTransparent(mat);
-                    isTransparentMaterial.Add(isTransparent);
-
-                    // Save color and transparency information
-                    initialColors.Add(mat.color);
-                    initialAlphaValues.Add(mat.color.a);
-
-                    Debug.Log($"Material: {mat.name}, Is Transparent: {isTransparent}, Initial Alpha Value: {mat.color.a}");
-                }
+                return;
             }
 
-            // Enable emission
-            if (autoEnableEmission)
-                EnableEmission();
-
-            materialsInitialized = true;
+            _frameCounter = 0;
+            float normalized = Mathf.PingPong(Time.time * blinkSpeed, 1f);
+            float intensity = Mathf.Lerp(minIntensity, maxIntensity, normalized);
+            Color pulseColor = Color.Lerp(Color.white, highlightColor, normalized);
+            ApplyHighlight(pulseColor, intensity);
         }
 
-        void Update()
-        {
-            if (!isHighlighting || !materialsInitialized || materials.Count == 0)
-                return;
-
-            // Use counter to reduce update frequency
-            frameCounter++;
-            if (frameCounter < updateInterval)
-                return;
-
-            frameCounter = 0;
-
-            // Use PingPong function to create smooth blinking effect
-            float v = Mathf.PingPong(Time.time * blinkSpeed, 1);
-            currentIntensity = Mathf.Lerp(minIntensity, maxIntensity, v);
-
-            // Precompute color value
-            blinkColor = Color.Lerp(Color.white, highlightColor, v);
-
-            ApplyHighlight(v);
-        }
-
-        // Start blinking highlight
         public void StartHighlight()
         {
-            Debug.Log("StartHighlight");
-
-            // Ensure materials are initialized
-            if (!materialsInitialized)
+            if (!_materialsInitialized)
+            {
                 InitializeMaterials();
+            }
 
             isHighlighting = true;
-            frameCounter = 0;
+            _frameCounter = 0;
         }
 
-        // Stop blinking highlight
         public void StopHighlight()
         {
-            Debug.Log("StopHighlight");
             isHighlighting = false;
             ResetMaterials();
         }
 
-        // Apply highlight effect
-        private void ApplyHighlight(float intensity)
+        private void InitializeMaterials()
         {
-            for (int i = 0; i < materials.Count; i++)
+            if (_materialsInitialized)
             {
-                Material material = materials[i];
-                if (material == null) continue;
+                return;
+            }
 
-                // Set emission properties
-                material.SetColor("_EmissiveColor", blinkColor);
-                material.SetFloat("_EmissiveIntensity", emissiveIntensity);
-                material.SetFloat("_EmissiveExposureWeight", intensity);
-
-                // Preserve transparency when setting color
-                if (maintainTransparency && isTransparentMaterial[i] && i < initialAlphaValues.Count)
+            _rendererBindings.Clear();
+            Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null)
                 {
-                    // Create a new color, preserving the original alpha value
-                    Color newColor = blinkColor;
-                    newColor.a = initialAlphaValues[i];
-                    material.color = newColor;
-
-                    // Ensure transparent rendering mode remains unchanged
-                    if (material.HasProperty("_SrcBlend"))
-                        material.SetFloat("_SrcBlend", 1); // SrcAlpha
-
-                    if (material.HasProperty("_DstBlend"))
-                        material.SetFloat("_DstBlend", 10); // OneMinusSrcAlpha
-
-                    if (material.HasProperty("_ZWrite"))
-                        material.SetFloat("_ZWrite", 0); // Disable depth writing
-
-                    if (material.renderQueue < 3000)
-                        material.renderQueue = 3000; // Transparent rendering queue
+                    continue;
                 }
-                else
+
+                Material[] sharedMaterials = renderer.sharedMaterials;
+                for (int i = 0; i < sharedMaterials.Length; i++)
                 {
-                    material.color = blinkColor;
+                    Material material = sharedMaterials[i];
+                    if (material == null)
+                    {
+                        continue;
+                    }
+
+                    _rendererBindings.Add(new RendererBinding(renderer, i, material));
                 }
+            }
+
+            _materialsInitialized = _rendererBindings.Count > 0;
+            if (!_materialsInitialized)
+            {
+                Debug.LogWarning("No valid renderer components found, unable to apply highlight effect");
             }
         }
 
-        // Reset materials
+        private void ApplyHighlight(Color pulseColor, float intensity)
+        {
+            foreach (RendererBinding binding in _rendererBindings)
+            {
+                binding.Renderer.GetPropertyBlock(binding.PropertyBlock, binding.MaterialIndex);
+
+                if (!string.IsNullOrEmpty(binding.ColorPropertyName))
+                {
+                    Color color = pulseColor;
+                    if (maintainTransparency && binding.IsTransparent)
+                    {
+                        color.a = binding.InitialColor.a;
+                    }
+
+                    binding.PropertyBlock.SetColor(binding.ColorPropertyName, color);
+                }
+
+                if (autoEnableEmission && !string.IsNullOrEmpty(binding.EmissionColorPropertyName))
+                {
+                    binding.PropertyBlock.SetColor(binding.EmissionColorPropertyName, pulseColor * emissiveIntensity * intensity);
+                }
+
+                if (!string.IsNullOrEmpty(binding.EmissionIntensityPropertyName))
+                {
+                    binding.PropertyBlock.SetFloat(binding.EmissionIntensityPropertyName, autoEnableEmission ? emissiveIntensity : 0f);
+                }
+
+                if (!string.IsNullOrEmpty(binding.EmissionExposurePropertyName))
+                {
+                    binding.PropertyBlock.SetFloat(binding.EmissionExposurePropertyName, intensity);
+                }
+
+                binding.Renderer.SetPropertyBlock(binding.PropertyBlock, binding.MaterialIndex);
+            }
+        }
+
         private void ResetMaterials()
         {
-            if (!materialsInitialized || materials.Count == 0) return;
-
-            // Restore original state of materials
-            for (int i = 0; i < materials.Count; i++)
+            if (!_materialsInitialized)
             {
-                if (i < initialColors.Count)
+                return;
+            }
+
+            foreach (RendererBinding binding in _rendererBindings)
+            {
+                binding.Renderer.GetPropertyBlock(binding.PropertyBlock, binding.MaterialIndex);
+
+                if (!string.IsNullOrEmpty(binding.ColorPropertyName))
                 {
-                    materials[i].color = initialColors[i];
+                    binding.PropertyBlock.SetColor(binding.ColorPropertyName, binding.InitialColor);
                 }
-                materials[i].SetColor("_EmissiveColor", Color.black);
-                materials[i].SetFloat("_EmissiveIntensity", 0);
-                materials[i].SetFloat("_EmissiveExposureWeight", 1);
+
+                if (!string.IsNullOrEmpty(binding.EmissionColorPropertyName))
+                {
+                    binding.PropertyBlock.SetColor(binding.EmissionColorPropertyName, Color.black);
+                }
+
+                if (!string.IsNullOrEmpty(binding.EmissionIntensityPropertyName))
+                {
+                    binding.PropertyBlock.SetFloat(binding.EmissionIntensityPropertyName, 0f);
+                }
+
+                if (!string.IsNullOrEmpty(binding.EmissionExposurePropertyName))
+                {
+                    binding.PropertyBlock.SetFloat(binding.EmissionExposurePropertyName, 1f);
+                }
+
+                binding.Renderer.SetPropertyBlock(binding.PropertyBlock, binding.MaterialIndex);
             }
         }
 
-        // Enable emission for all materials
-        private void EnableEmission()
-        {
-            if (materials.Count == 0) return;
-
-            foreach (Material material in materials)
-            {
-                if (material == null) continue;
-
-                // Set emission properties to initial state
-                material.SetColor("_EmissiveColor", Color.black);
-                material.SetFloat("_EmissiveIntensity", 0);
-                material.SetFloat("_EmissiveExposureWeight", 1);
-            }
-
-            Debug.Log("Emission enabled for all materials and reset emission color");
-        }
-
-        // Reset state when the object is disabled or destroyed
         private void OnDisable()
         {
             if (isHighlighting)
             {
                 isHighlighting = false;
                 ResetMaterials();
+            }
+        }
+
+        private sealed class RendererBinding
+        {
+            public RendererBinding(Renderer renderer, int materialIndex, Material material)
+            {
+                Renderer = renderer;
+                MaterialIndex = materialIndex;
+                PropertyBlock = new MaterialPropertyBlock();
+                ColorPropertyName = ResolveColorProperty(material);
+                EmissionColorPropertyName = ResolveFirstProperty(material, "_EmissionColor", "_EmissiveColor");
+                EmissionIntensityPropertyName = ResolveFirstProperty(material, "_EmissionIntensity", "_EmissiveIntensity");
+                EmissionExposurePropertyName = ResolveFirstProperty(material, "_EmissionExposureWeight", "_EmissiveExposureWeight");
+                IsTransparent = IsTransparentMaterial(material);
+                InitialColor = !string.IsNullOrEmpty(ColorPropertyName) ? material.GetColor(ColorPropertyName) : Color.white;
+            }
+
+            public Renderer Renderer { get; }
+            public int MaterialIndex { get; }
+            public MaterialPropertyBlock PropertyBlock { get; }
+            public string ColorPropertyName { get; }
+            public string EmissionColorPropertyName { get; }
+            public string EmissionIntensityPropertyName { get; }
+            public string EmissionExposurePropertyName { get; }
+            public bool IsTransparent { get; }
+            public Color InitialColor { get; }
+
+            private static string ResolveColorProperty(Material material)
+            {
+                return ResolveFirstProperty(material, "_BaseColor", "_Color");
+            }
+
+            private static string ResolveFirstProperty(Material material, params string[] propertyNames)
+            {
+                foreach (string propertyName in propertyNames)
+                {
+                    if (material.HasProperty(propertyName))
+                    {
+                        return propertyName;
+                    }
+                }
+
+                return null;
+            }
+
+            private static bool IsTransparentMaterial(Material material)
+            {
+                if (material.HasProperty("_Mode"))
+                {
+                    int mode = (int)material.GetFloat("_Mode");
+                    if (mode == 2 || mode == 3)
+                    {
+                        return true;
+                    }
+                }
+
+                if (material.renderQueue >= 3000)
+                {
+                    return true;
+                }
+
+                if (material.IsKeywordEnabled("_ALPHABLEND_ON") ||
+                    material.IsKeywordEnabled("_ALPHAPREMULTIPLY_ON") ||
+                    material.IsKeywordEnabled("_SURFACE_TYPE_TRANSPARENT"))
+                {
+                    return true;
+                }
+
+                string colorProperty = ResolveColorProperty(material);
+                return !string.IsNullOrEmpty(colorProperty) && material.GetColor(colorProperty).a < 0.99f;
             }
         }
     }

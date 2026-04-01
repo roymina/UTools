@@ -5,13 +5,13 @@ using UTools;
 
 public class _TestUFind : UBehaviour
 {
-    [Child] TextMeshProUGUI childA, childB;
-    [Child("customName")] TextMeshProUGUI childC;
-    [Child] Image imgUFind;
-    [Resource] Sprite ufind;
+    [Child] TextMeshProUGUI childA = null, childB = null;
+    [Child("customName")] TextMeshProUGUI childC = null;
+    [Child] Image imgUFind = null;
+    [Resource] Sprite ufind = null;
     public bool UseDragGet = false;
     [ShowIf("UseDragGet")]
-    public GameObject MyGameObject;
+    public GameObject MyGameObject = null;
     void Start()
     {
         childA.color = UnityEngine.Color.cyan;

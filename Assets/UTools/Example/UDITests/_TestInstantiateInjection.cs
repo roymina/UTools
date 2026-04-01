@@ -7,7 +7,7 @@ namespace UTools.Example
     public class _TestInstantiateInjection : MonoBehaviour
     {
         [Inject]
-        _TestServiceA serviceA;
+        _TestServiceA serviceA = null;
         void OnEnable()
         {
             GetComponent<Button>().onClick.AddListener(() =>

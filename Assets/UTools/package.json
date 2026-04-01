@@ -1,0 +1,24 @@
+{
+  "name": "com.roymina.utools",
+  "displayName": "UTools",
+  "version": "0.2.0",
+  "unity": "2023.2",
+  "description": "A lightweight Unity toolkit covering dependency injection, a message center, object lookup helpers, and utility extensions.",
+  "author": {
+    "name": "Roy"
+  },
+  "keywords": [
+    "unity",
+    "dependency-injection",
+    "message-bus",
+    "utilities"
+  ],
+  "documentationUrl": "Documentation~/README.md",
+  "samples": [
+    {
+      "displayName": "UTools Example",
+      "description": "Example scenes and scripts that demonstrate the main runtime modules.",
+      "path": "Samples~/Example"
+    }
+  ]
+}

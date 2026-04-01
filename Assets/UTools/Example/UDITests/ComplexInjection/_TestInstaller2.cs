@@ -1,15 +1,11 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-
 namespace UTools.Example
 {
-    public class _TestInstaller2 : UDIInstallerBase
+    public class _TestInstaller2 : MonoInstaller
     {
-        protected override void RegisterServices()
+        public override void InstallBindings(UDIContainer container)
         {
-            Container.Register<_TestDataEntity>();
-             
+            container.Bind<_TestDataEntity>()
+                .AsSingle();
         }
     }
 }

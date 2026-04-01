@@ -12,7 +12,6 @@
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
-using System.Linq;
 
 namespace UTools.Editor
 {
@@ -21,7 +20,12 @@ namespace UTools.Editor
     {
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
-            // Ensures execution only in editor mode
+            if (property.propertyType != SerializedPropertyType.Boolean)
+            {
+                EditorGUI.PropertyField(position, property, label, true);
+                return;
+            }
+
             if (Application.isPlaying)
             {
                 EditorGUI.PropertyField(position, property, label);
@@ -36,6 +40,7 @@ namespace UTools.Editor
             if (EditorGUI.EndChangeCheck())
             {
                 property.boolValue = value;
+                property.serializedObject.ApplyModifiedProperties();
                 MonoBehaviour target = property.serializedObject.targetObject as MonoBehaviour;
 
                 if (target != null)

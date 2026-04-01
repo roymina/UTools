@@ -4,8 +4,8 @@ using UTools;
 
 public class _TestMessage : UBehaviour
 {
-    [Child] Button btnPublisher;
-    [Child] TextMeshProUGUI txtSubscriber1, txtSubscriber2, txtSubscriber3;
+    [Child] Button btnPublisher = null;
+    [Child] TextMeshProUGUI txtSubscriber1 = null, txtSubscriber2 = null, txtSubscriber3 = null;
     void Start()
     {
         UMessageCenter.Instance.Subscribe<MyCustomMessage>(msg =>

@@ -2,325 +2,265 @@
 
 # UTools
 
-UTools is a lightweight Unity plugin that provides essential tools and patterns for game development. It includes dependency injection, a message center, GameObject/Component finders, and various utility functions to streamline your Unity development workflow.UTools has no third-party dependencies.
+UTools is a lightweight Unity toolkit for dependency injection, messaging, object lookup, and everyday runtime helpers. It is designed to stay small, usable in game projects, and easy to extract into a reusable package.
 
-## Features
+## Modules
 
-### 1. Dependency Injection (UDI)
+### UDI
 
-- Lightweight dependency injection system
-- Supports field, property, and method injection
-- **Note: Constructor injection is NOT supported**
-- Supports MonoBehaviour class injection
-- Hierarchical container support with parent-child relationships
-- Fluent API for binding configuration
-- Lifecycle management interfaces (IInitializable, ITickable, etc.)
-- Automatic dependency resolution
-- Singleton and transient scope management
+- Field, property, and method injection via `[Inject]`
+- Scene-level and hierarchical containers via `UDIContext`
+- Runtime lifecycle hooks: `IInitializable`, `ITickable`, `ILateTickable`, `IFixedTickable`, `IUDisposable`, `IPausable`
+- `NonLazy()` support
+- `TryResolve<T>()` / `TryResolve(Type, out object)` support
+- `MonoBehaviour` resolution and injection for scene objects and instantiated prefabs
 
-### 2. Message Center (UMessage)
+Notes:
 
-- Event-driven communication system
-- Type-safe message passing
-- Subscribe/unsubscribe mechanism
-- Global and scoped event handling
+- Constructor injection is not supported.
+- `UDIContext` is the supported DI entry point.
+- Identifier-based resolution is not part of the current API surface.
 
-### 3. GameObject/Component/Resource Finder (UFind)
+### UMessage
 
-- Hierarchy-based object finding
-- Attribute-based object finding
-- Automatic Resource loading
-- Component caching for performance improvement
-- Type-safe component access
+- Typed publish/subscribe API
+- Disposable subscription handle support
+- Pending-message replay for late subscribers
+- Automatic cleanup for destroyed `UnityEngine.Object` subscriber targets
 
-### 4. Utility Functions (UUtilis)
+### UFind
 
-- Common Unity operations
+- `[Child]` child-object lookup
+- `[Comp]` component lookup on self
+- `[Resource]` `Resources.Load` binding
+- Reflection metadata caching to reduce repeated startup scanning
+- Path-based child lookup support such as `[Child("Root/Panel/Button")]`
+
+### UUtils
+
+- String, time, file, GameObject, mesh, color, and UI utility extensions
+- Persistent-data helpers now create missing directories automatically
+
+### Editor Helpers
+
+- `ButtonAttribute`
+- `ShowIfAttribute`
+- `AutoComponentAttribute`
 
 ## Installation
 
-1. Download the UTools package from the Release page
-2. Import UTools.unitypackage into your Unity project
-3. Start using it!
+### Option 1: Unity package / source drop-in
 
-## Quick Start
+Import the project content under `Assets/UTools` into your Unity project.
 
-### Dependency Injection Example
+### Option 2: `unitypackage`
 
-UDI provides two ways to configure dependency injection:
+Use the packaged release artifact if you want a simpler import flow.
 
-#### Method 1: Using UDIInstallerBase (Legacy/Simple Approach)
+### Option 3: Local package workflow
 
-1. Create a class that inherits from `UDIInstallerBase` and implement the `RegisterServices()` method.
+This repository now includes package-oriented metadata under `Assets/UTools`, including:
 
-   ```c#
-   using UTools;
+- `package.json`
+- `Documentation~/`
+- `Samples~/`
+- `CHANGELOG.md`
+- `asmdef` files for runtime, editor, examples, and tests
 
-   public class GameInstaller : UDIInstallerBase
-   {
-       protected override void RegisterServices()
-       {
-           Container.Register<NormalClass>();
-           Container.Register<MonoBehaviourClass>();
-       }
-   }
-   ```
+## Recommended Setup
 
-   > **Cross-Scene Services:** `UDIInstallerBase` uses a static container, so all registered services are cross-scene by default. This means registered services persist after loading a new scene. If MonoBehaviour services need to be preserved across scene transitions, the system will automatically call `DontDestroyOnLoad`.
-   > 
-   > If a MonoBehaviour class already exists in the scene, it will be automatically found and registered. Otherwise, a new GameObject will be created with the class attached.
+The recommended entry point is `UDIContext`.
 
-#### Method 2: Using UDIContext with Installers (Recommended)
+1. Add a `UDIContext` to a scene root object.
+2. Add one or more `MonoInstaller` or `ScriptableObjectInstaller` instances.
+3. Register services in `InstallBindings`.
+4. Use `[Inject]` in runtime classes that should receive services.
 
-1. Create an installer class that inherits from `MonoInstaller` or `ScriptableObjectInstaller`:
+```csharp
+using UTools;
+using UnityEngine;
 
-   ```c#
-   using UTools;
+public interface ILogger
+{
+    void Log(string message);
+}
 
-   public class GameInstaller : MonoInstaller
-   {
-       public override void InstallBindings(UDIContainer container)
-       {
-           // Basic service binding
-           container.Bind<ILogger>()
-                   .To<UnityLogger>()
-                   .AsSingle();
+public class UnityLogger : ILogger
+{
+    public void Log(string message) => Debug.Log(message);
+}
 
-           container.Bind<IDataService>()
-                   .To<DataService>()
-                   .AsSingle();
+public class GameInstaller : MonoInstaller
+{
+    public override void InstallBindings(UDIContainer container)
+    {
+        container.Bind<ILogger>()
+            .To<UnityLogger>()
+            .AsSingle();
 
-           // Bind with NonLazy (instantiate immediately)
-           container.Bind<GameManager>()
-                   .ToSelf()
-                   .AsSingle()
-                   .NonLazy();
-       }
-   }
-   ```
+        container.Bind<GameManager>()
+            .ToSelf()
+            .AsSingle()
+            .NonLazy();
+    }
+}
+```
 
-   **Cross-Scene Services (Using UDIContext):**
-   
-   For global services that persist across scenes, add a script to the GameObject containing `UDIContext` to keep it alive:
-   
-   ```c#
-   using UnityEngine;
-   using UTools;
-   
-   public class GlobalContext : MonoBehaviour
-   {
-       private void Awake()
-       {
-           DontDestroyOnLoad(gameObject);
-       }
-   }
-   ```
-   
-   Or create a dedicated global Context:
-   
-   ```c#
-   public class ProjectContext : UDIContext
-   {
-       protected override void Awake()
-       {
-           // Ensure only one instance exists
-           if (FindObjectsByType<ProjectContext>(FindObjectsSortMode.None).Length > 1)
-           {
-               Destroy(gameObject);
-               return;
-           }
-           
-           DontDestroyOnLoad(gameObject);
-           base.Awake();
-       }
-   }
-   ```
-   
-   This way, new scene's `UDIContext` can automatically inherit services from the global Context (through parent container mechanism).
+```csharp
+using UTools;
 
-2. Add a `UDIContext` component to a GameObject in your scene and attach the installer to it.
-
-#### Using Dependency Injection
-
-2. Use the `[Inject]` attribute to inject services into any class.
-
-   ```c#
-   using UTools;
-   public class TestInjection : MonoBehaviour
-   {
-       [Inject] NormalClass normalClass;
-       [Inject] MonoBehaviourClass monoBehaviourClass;
-       
-       void Start()
-       {
-           normalClass.DoSomething();
-           monoBehaviourClass.DoSomething();
-       }
-   }
-   ```
-
-3. You can also use the `[Inject]` attribute on methods and properties. Dependencies will be injected as parameters or property values.
-
-   ```c#
-   public class TestServiceA
-   {
-       [Inject]
-       public void InjectServiceB(TestServiceB testServiceB)
-       {
-           testServiceB.SayHello();
-       }
-       
-       [Inject]
-       public ILogger Logger { get; set; }
-   }
-   ```
-
-   > **Important:** Constructor injection is NOT supported. Use field, property, or method injection instead.
-   > 
-   > Note: In the above example, `TestServiceB` will be automatically resolved and registered if not already registered.
-
-#### Lifecycle Interfaces
-
-UDI supports lifecycle management through interfaces:
-
-- `IInitializable` - Called once after all dependencies are injected
-- `ITickable` - Called every frame (Update)
-- `ILateTickable` - Called every frame (LateUpdate)
-- `IFixedTickable` - Called every fixed frame (FixedUpdate)
-- `IUDisposable` - Called when the context is destroyed
-- `IPausable` - Supports Pause/Resume functionality
-
-Example:
-
-```c#
 public class GameManager : IInitializable, ITickable
 {
     [Inject] private ILogger _logger;
-    
+
     public void Initialize()
     {
         _logger.Log("GameManager initialized");
     }
-    
+
     public void Tick()
     {
-        // Called every frame
     }
 }
 ```
 
-### Message Center Example
+## Global Context Pattern
 
-```c#
-// Subscribe to a message
-UMessageCenter.Instance.Subscribe<MyCustomMessage>(msg =>
-{
-    txtSubscriber1.text = txtSubscriber2.text = txtSubscriber3.text = msg.ToString();
-});
+If you want cross-scene services, keep the context object alive:
 
-// Publish a message
-btnPublisher.onClick.AddListener(() =>
-{
-    UMessageCenter.Instance.Publish(new MyCustomMessage { Name = "MyCustomMessage" });
-});
-```
-
-### GameObject/Component/Resource Finder Example
-
-Write a class that inherits from `UBehaviour` and use the `[Child]` attribute to specify child objects. The script will automatically find and cache the object at game start. Child objects can be GameObjects or Components.
-
-If the Child attribute does not pass any parameters, it will look for a child object with the same name as the variable.
-
-```c#
+```csharp
+using UnityEngine;
 using UTools;
-public class TestBehaviour : UBehaviour
-{
-    [Child]
-    public GameObject childObject;
 
-    [Child]
-    public TextMeshProUGUI text;
+public class ProjectContext : UDIContext
+{
+    protected override void Awake()
+    {
+        if (FindObjectsByType<ProjectContext>(FindObjectsSortMode.None).Length > 1)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        DontDestroyOnLoad(gameObject);
+        base.Awake();
+    }
 }
 ```
 
-If parameters are passed, the variable name is ignored, and the specified child object name is directly searched.
+Child contexts can inherit from parent containers through the scene hierarchy.
 
-```c#
-[Child("someObject")]
-public GameObject childObject;
+## Installer Example
+
+Use a `MonoInstaller` under a `UDIContext`:
+
+```csharp
+using UTools;
+
+public class ExampleInstaller : MonoInstaller
+{
+    public override void InstallBindings(UDIContainer container)
+    {
+        container.Bind<LegacyService>()
+            .AsSingle();
+    }
+}
 ```
 
-Use the [Resource] attribute to specify the resource path. The script will automatically find and cache the resource at game start.
+## Messaging Example
 
-```c#
-// Find the testPrefab resource under the Resources folder and load it as a GameObject
-[Resource]
-public GameObject testPrefab;
+```csharp
+using UTools;
 
-// Find the Resources/Prefabs/TestPrefab resource and load it as a GameObject
-[Resource("Prefabs/TestPrefab")]
-public GameObject testPrefab;
+public class ExampleUsage
+{
+    private IMessageSubscription _subscription;
+
+    public void Enable()
+    {
+        _subscription = UMessageCenter.Instance.Subscribe<MyMessage>(OnMessage);
+    }
+
+    public void Disable()
+    {
+        _subscription?.Dispose();
+        _subscription = null;
+    }
+
+    public void Publish()
+    {
+        UMessageCenter.Instance.Publish(new MyMessage { Text = "Hello" });
+    }
+
+    private void OnMessage(MyMessage message)
+    {
+        UnityEngine.Debug.Log(message.Text);
+    }
+}
+
+public class MyMessage
+{
+    public string Text;
+}
 ```
 
-### Utility Functions Example
+If a message is published before there are subscribers, the first later subscriber can still replay the pending message by default.
 
-Utility classes are encapsulated in a pure static class, and all methods are extension methods. You can call them by adding a `.` after the corresponding type instance.
+## UFind Example
 
-#### [Common]
+```csharp
+using TMPro;
+using UnityEngine;
+using UTools;
 
-1. **Map**: Maps a value from one range to another, ensuring the value is within the original range.
+public class ExampleView : UBehaviour
+{
+    [Comp] public Canvas Canvas;
+    [Child] public TextMeshProUGUI Title;
+    [Child("Root/Buttons/Confirm")] public GameObject ConfirmButton;
+    [Resource("Icons/Logo")] public Sprite Logo;
+}
+```
 
-#### [Strings]
+Behavior notes:
 
-1. **IsNullOrEmpty**: Checks if the string is null or empty.
+- If `[Child]` has no argument, the field name is used.
+- If duplicate child names exist, UTools logs an error and asks for a path-based lookup.
 
-2. **IsNotNullOrEmpty**: Checks if the string is not null and not empty.
-3. **CheckUserName**: Checks if the input string consists only of letters, digits, and underscores.
-4. **TrimLength**: Trims the string to a specified length, appending an ellipsis if truncated.
-5. **CheckStrChinese**: Checks if the input string consists only of Chinese characters.
-6. **ToBase64String**: Converts the string to a Base64 string.
+## Instantiation With Injection
 
-#### [Date & Time]
+Use `UGameObjectFactory` if you need injection on instantiated prefabs:
 
-1. **ToTimeString**: Converts an integer (seconds) to a time string, with optional Chinese format and custom time format.
-2. **Tohhmmss**: Converts a `TimeSpan` to a formatted string, with optional Chinese format.
-3. **CalculateTimeSpan**: Calculates the `TimeSpan` between two time strings.
+```csharp
+var instance = UGameObjectFactory.InstantiateWithDependency(prefab, parentTransform);
+```
 
-#### [GameObject & Components]
+This injects the prefab root and all child `MonoBehaviour` components.
 
-1. **FindChild**: Finds a child `GameObject` by name, with options for searching all descendants and performing a fuzzy search.
-2. **GetAllChildren**: Retrieves all children and descendants of a `GameObject`, including deactivated ones.
-3. **ExistsChild**: Checks if a child `GameObject` with the specified name exists.
-4. **ShowOneChild**: Shows only one specified child `GameObject` by name or index.
-5. **HideOneChild**: Hides one specified child `GameObject` by name or index.
-6. **ToggleAllChildren**: Toggles the visibility of all children `GameObjects`.
-7. **ToggleMesh**: Toggles the visibility of `MeshRenderers` and `SkinnedMeshRenderers`.
-8. **CloneMesh**: Clones the mesh of the `GameObject`, optionally applying a new material and name.
-9. **CombineMesh**: Combines the meshes of all child `GameObjects` into a single mesh.
-10. **GetMeshFilterBounds**: Calculates the bounds of a `MeshFilter` attached to the `Transform`, optionally including all child `Transforms`.
-11. **FindNearestObject**: Finds the nearest `GameObject` with a component of type `T`.
-12. **IsActiveAndMeshEnabled**: Checks if a `GameObject` is active and its `MeshRenderer` is enabled.
-13. **HasComponent**: Checks if a `GameObject` has a specific component.
-14. **EnsureComponent**: Ensures that a `GameObject` has a specific component, adding it if necessary.
-15. **GetComponentInSelfThenParent**: Gets a component from the `GameObject` or its parent.
-16. **FindChildByName**: Finds a child `Transform` by name.
+## Testing
 
-#### [Color]
+The project now includes Unity Test Framework entry points:
 
-1. **ConvertColorToColor32**: Converts a `Color` to a `Color32`.
-2. **ConvertColor32ToColor**: Converts a `Color32` to a `Color`.
+- `Assets/UTools/Tests/EditMode`
+- `Assets/UTools/Tests/PlayMode`
 
-#### [UI]
+Current automated validation in this repository:
 
-1. **ToggleAsCanvasGroup**: Toggles the visibility of a `RectTransform` as a `CanvasGroup`, with options for tweening and interactivity.
-2. **ToggleAsCanvasGroupAuto**: Automatically toggles the visibility of a `RectTransform` as a `CanvasGroup`, with options for tweening.
-3. **Show (Transform)**: Shows or hides a `Transform` by setting its local scale.
-4. **Show (RectTransform)**: Shows or hides a `RectTransform` by setting its local scale.
-5. **ToSprite**: Converts a `Texture2D` to a `Sprite`.
-6. **ToTexture2D (Sprite)**: Converts a `Sprite` to a `Texture2D`.
-7. **ToTexture2D (string)**: Converts a Base64 string to a `Texture2D`.
-8. **ToBase64**: Converts a `Texture2D` to a Base64 string.
-9. **ToTexture2D (Texture)**: Converts a `Texture` to a `Texture2D`.
-10. **DecodeBase64Image**: Decodes a Base64 string to a `Texture2D`.
-11. **TweenColor**: Tweens the color of a UI `Image`.
-12. **MoveOutOfScreen**: Moves a UI element out of the screen in a specified direction, with options for tweening.
+- `dotnet build utools.sln -nologo`
+- Unity EditMode / PlayMode tests through the Unity Test Runner
+
+## Repository Structure
+
+- `Assets/UTools/Scripts`: runtime and editor source
+- `Assets/UTools/Example`: sample scenes and scripts
+- `Assets/UTools/Tests`: EditMode and PlayMode tests
+- `Assets/UTools/Documentation~`: package documentation
+- `Assets/UTools/Samples~`: package sample placeholders
+
+## Status
+
+UTools has been refactored toward a reusable package structure, but there are still compatibility shims for older scenes and examples. The recommended path for new development is:
+
+- `UDIContext`
+- `MonoInstaller` / `ScriptableObjectInstaller`
+- typed `UMessageCenter` subscriptions with disposable handles

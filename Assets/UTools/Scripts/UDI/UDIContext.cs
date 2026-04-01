@@ -1,14 +1,15 @@
-using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace UTools
 {
     public class UDIContext : MonoBehaviour
     {
         [SerializeField]
-        private List<MonoInstaller> _installers = new List<MonoInstaller>();
+        private List<MonoInstaller> _installers = new();
         [SerializeField]
-        private List<ScriptableObjectInstaller> _scriptableObjectInstallers = new List<ScriptableObjectInstaller>();
+        private List<ScriptableObjectInstaller> _scriptableObjectInstallers = new();
 
         private UDIContainer _container;
         private LifecycleManager _lifecycleManager;
@@ -24,34 +25,42 @@ namespace UTools
 
         public void Initialize()
         {
-            if (_hasInitialized) return;
+            if (_hasInitialized)
+            {
+                return;
+            }
+
             _hasInitialized = true;
+            _lifecycleManager = GetComponent<LifecycleManager>();
+            if (_lifecycleManager == null)
+            {
+                _lifecycleManager = gameObject.AddComponent<LifecycleManager>();
+            }
 
-            // 创建并配置生命周期管理器
-            _lifecycleManager = gameObject.AddComponent<LifecycleManager>();
+            UDIContext parentContext = GetParentContext();
+            UDIContainer parentContainer = parentContext?.Container;
 
-            // 获取父级Context的容器作为父容器
-            var parentContext = GetParentContext();
-            var parentContainer = parentContext?.Container;
-
-            // 创建当前Context的容器
-            _container = new UDIContainer(parentContainer);
-
-            // 注册生命周期管理器
+            _container = new UDIContainer(parentContainer, _lifecycleManager);
             _container.Bind<LifecycleManager>()
-                     .FromInstance(_lifecycleManager)
-                     .AsSingle();
+                .FromInstance(_lifecycleManager)
+                .AsSingle();
 
-            // 安装所有配置的安装器
             InstallBindings();
+            _container.FinalizeBindings();
+            InjectContextObjects(parentContainer == null);
 
-            // 初始化所有实现了IInitializable的服务
+            if (parentContainer == null)
+            {
+                UGameObjectFactory.SetContainer(_container);
+            }
+
             _lifecycleManager.Initialize();
         }
 
         private void InstallBindings()
         {
-            // 首先安装ScriptableObject安装器
+            HashSet<MonoInstaller> installedMonoInstallers = new();
+
             foreach (var installer in _scriptableObjectInstallers)
             {
                 if (installer != null)
@@ -60,45 +69,84 @@ namespace UTools
                 }
             }
 
-            // 然后安装MonoBehaviour安装器
             foreach (var installer in _installers)
             {
                 if (installer != null)
+                {
+                    installer.InstallBindings(_container);
+                    installedMonoInstallers.Add(installer);
+                }
+            }
+
+            foreach (MonoInstaller installer in GetComponents<MonoInstaller>())
+            {
+                if (installer != null && installedMonoInstallers.Add(installer))
                 {
                     installer.InstallBindings(_container);
                 }
             }
         }
 
+        private void InjectContextObjects(bool injectWholeScene)
+        {
+            if (injectWholeScene)
+            {
+                Scene scene = gameObject.scene;
+                foreach (GameObject rootGameObject in scene.GetRootGameObjects())
+                {
+                    _container.InjectGameObject(rootGameObject);
+                }
+                return;
+            }
+
+            _container.InjectGameObject(gameObject);
+        }
+
         private UDIContext GetParentContext()
         {
-            var parent = transform.parent;
+            Transform parent = transform.parent;
             while (parent != null)
             {
-                var context = parent.GetComponent<UDIContext>();
+                UDIContext context = parent.GetComponent<UDIContext>();
                 if (context != null)
                 {
                     return context;
                 }
+
                 parent = parent.parent;
             }
+
             return null;
         }
     }
 
-    // MonoBehaviour形式的安装器基类
     public abstract class MonoInstaller : MonoBehaviour, IInstaller
     {
+        protected virtual void Awake()
+        {
+            UDIContext localContext = GetComponent<UDIContext>();
+            if (localContext != null)
+            {
+                localContext.Initialize();
+                return;
+            }
+
+            if (GetComponentInParent<UDIContext>() != null)
+            {
+                return;
+            }
+
+            gameObject.AddComponent<UDIContext>().Initialize();
+        }
+
         public abstract void InstallBindings(UDIContainer container);
     }
 
-    // ScriptableObject形式的安装器基类
     public abstract class ScriptableObjectInstaller : ScriptableObject, IInstaller
     {
         public abstract void InstallBindings(UDIContainer container);
     }
 
-    // 安装器接口
     public interface IInstaller
     {
         void InstallBindings(UDIContainer container);

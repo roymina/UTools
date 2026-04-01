@@ -63,6 +63,8 @@ namespace UTools.Editor
                     conditionValue = conditionProperty.boolValue;
                     break;
                 case SerializedPropertyType.Integer:
+                    conditionValue = conditionProperty.intValue != 0;
+                    break;
                 case SerializedPropertyType.Float:
                     conditionValue = conditionProperty.floatValue != 0;
                     break;

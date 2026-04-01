@@ -4,11 +4,11 @@ namespace UTools.Example
 {
     public class _TestDINewScene : UBehaviour
     {
-        [Inject] _TestServiceA _testService;
-        [Inject] _TestMono _testMono;
+        [Inject] _TestServiceA _testService = null;
+        [Inject] _TestMono _testMono = null;
 
-        [Child] TextMeshProUGUI txtServiceInejction;
-        [Child] TextMeshProUGUI txtMonoInejction;
+        [Child] TextMeshProUGUI txtServiceInejction = null;
+        [Child] TextMeshProUGUI txtMonoInejction = null;
 
         void Start()
         {

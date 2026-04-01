@@ -8,7 +8,7 @@ namespace UTools.Example
     {
         // 注入数据实体，用于共享网页内容
         [Inject]
-        private _TestDataEntity dataEntity;
+        private _TestDataEntity dataEntity = null;
 
   
 

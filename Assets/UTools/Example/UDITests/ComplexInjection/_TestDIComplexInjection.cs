@@ -8,11 +8,11 @@ namespace UTools.Example
     public class _TestDIComplexInjection : UBehaviour
     {
         [Inject]
-        _TestDataEntity dataEntity;
+        _TestDataEntity dataEntity = null;
         [Inject]
-        _TestComplexMono complexMono;
+        _TestComplexMono complexMono = null;
         [Child]
-        TextMeshProUGUI txtWebContent;
+        TextMeshProUGUI txtWebContent = null;
         
         // 不要在Start中访问注入的依赖，可能尚未完成注入
         // void Start()

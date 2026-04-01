@@ -33,8 +33,8 @@ namespace UTools
 
     public class GameManager : IInitializable, ITickable
     {
-        [Inject] private ILogger _logger;
-        [Inject] private IDataService _dataService;
+        [Inject] private ILogger _logger = null;
+        [Inject] private IDataService _dataService = null;
 
         public void Initialize()
         {

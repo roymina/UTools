@@ -141,11 +141,11 @@ namespace UTools
             TimeSpan time = TimeSpan.FromSeconds(seconds);
             if (time.Hours > 0)
             {
-                result = time.ToString(format == null ? useChinese ? @"hh\Ð¡Ê±mm\·Öss\Ãë" : @"hh\:mm\:ss" : format);
+                result = time.ToString(format == null ? useChinese ? @"hh\Ð¡Ê±mm\ï¿½ï¿½ss\ï¿½ï¿½" : @"hh\:mm\:ss" : format);
             }
             else
             {
-                result = time.ToString(format == null ? useChinese ? @"mm\·Öss\Ãë" : @"mm\:ss" : format);
+                result = time.ToString(format == null ? useChinese ? @"mm\ï¿½ï¿½ss\ï¿½ï¿½" : @"mm\:ss" : format);
             }
 
             return result;
@@ -166,7 +166,7 @@ namespace UTools
             }
             else
             {
-                result = timeSpan.ToString(timeSpan.Hours > 0 ? @"hh\Ð¡Ê±mm\·Öss\Ãë" : @"mm\·Öss\Ãë");
+                result = timeSpan.ToString(timeSpan.Hours > 0 ? @"hh\Ð¡Ê±mm\ï¿½ï¿½ss\ï¿½ï¿½" : @"mm\ï¿½ï¿½ss\ï¿½ï¿½");
             }
 
             return result;
@@ -203,7 +203,7 @@ namespace UTools
                     return attribute.Description;
                 }
             }
-            return value.ToString(); // Èç¹ûÃ»ÓÐ±ê×¢£¬·µ»ØÄ¬ÈÏÃ¶¾ÙÃû³Æ
+            return value.ToString(); // ï¿½ï¿½ï¿½Ã»ï¿½Ð±ï¿½×¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¬ï¿½ï¿½Ã¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         }
         #endregion
         #region File & Data
@@ -332,7 +332,7 @@ namespace UTools
                         .ToArray();
         }
 
-        // »ñÈ¡Ò»¼¶×ÓÎïÌåµÄÁÐ±í
+        // ï¿½ï¿½È¡Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð±ï¿½
         public static List<GameObject> GetFirstLevelChildren(this GameObject self)
         {
             List<GameObject> children = new List<GameObject>();

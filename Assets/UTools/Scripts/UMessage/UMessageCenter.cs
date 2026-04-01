@@ -1,121 +1,229 @@
-//-----------------------------------------------------------------------
-// <copyright file="UMessageCenter.cs" company="DxTech Co. Ltd.">
-//     Copyright (c) DxTech Co. Ltd. All rights reserved.
-// </copyright>
-// <author>Roy</author>
-// <date>2025-02-07</date>
-// <summary>
-//     MessageCenter Class.
-// </summary>
-//-----------------------------------------------------------------------
-
 using System;
 using System.Collections.Generic;
-
+using UnityEngine;
 
 namespace UTools
 {
+    public interface IMessageSubscription : IDisposable
+    {
+    }
+
     public class UMessageCenter
     {
-        // Singleton instance
         private static UMessageCenter _instance;
 
-        // Dictionary to store subscribers for each message type
-        private Dictionary<Type, List<Delegate>> _subscribers = new Dictionary<Type, List<Delegate>>();
+        private readonly Dictionary<Type, ISubscriberCollection> _subscribers = new();
+        private readonly object _gate = new();
 
-        // Dictionary to store pending messages for each message type
-        private Dictionary<Type, Queue<object>> _pendingMessages = new Dictionary<Type, Queue<object>>();
-
-        // Ensure only one instance exists
-        public static UMessageCenter Instance
-        {
-            get
-            {
-                if (_instance == null)
-                {
-                    _instance = new UMessageCenter();
-                }
-                return _instance;
-            }
-        }
+        public static UMessageCenter Instance => _instance ??= new UMessageCenter();
 
         private UMessageCenter()
         {
-            // Private constructor to prevent instantiation
         }
 
-        /// <summary>
-        /// Subscribe to a message type.
-        /// </summary>
-        /// <typeparam name="T">The type of message to subscribe to.</typeparam>
-        /// <param name="handler">The handler method to be called when the message is published.</param>
-        public void Subscribe<T>(Action<T> handler)
+        public IMessageSubscription Subscribe<T>(Action<T> handler, bool replayPending = true)
         {
-            Type messageType = typeof(T);
-            if (!_subscribers.ContainsKey(messageType))
+            if (handler == null)
             {
-                _subscribers[messageType] = new List<Delegate>();
+                throw new ArgumentNullException(nameof(handler));
             }
 
-            // Add the handler to the list
-            _subscribers[messageType].Add(handler);
+            List<T> pendingMessages = null;
 
-            // Check if there are pending messages for this type
-            if (_pendingMessages.ContainsKey(messageType))
+            lock (_gate)
             {
-                var queue = _pendingMessages[messageType];
-                while (queue.Count > 0)
+                SubscriberCollection<T> collection = GetOrCreateCollection<T>();
+                collection.CleanupDeadSubscribers();
+                collection.Add(handler);
+
+                if (replayPending)
                 {
-                    // Process pending messages
-                    var pendingMessage = queue.Dequeue();
-                    handler((T)pendingMessage);
+                    pendingMessages = collection.DrainPendingMessages();
                 }
-
-                // Remove the queue after processing
-                _pendingMessages.Remove(messageType);
             }
+
+            if (pendingMessages != null)
+            {
+                foreach (T message in pendingMessages)
+                {
+                    InvokeHandlerSafely(handler, message);
+                }
+            }
+
+            return new MessageSubscription(() => Unsubscribe(handler));
         }
 
-        /// <summary>
-        /// Unsubscribe from a message type.
-        /// </summary>
-        /// <typeparam name="T">The type of message to unsubscribe from.</typeparam>
-        /// <param name="handler">The handler method to be removed from the subscription.</param>
         public void Unsubscribe<T>(Action<T> handler)
         {
-            Type messageType = typeof(T);
-            if (_subscribers.ContainsKey(messageType))
+            if (handler == null)
             {
-                // Remove the handler from the list
-                _subscribers[messageType].Remove(handler);
+                return;
+            }
+
+            lock (_gate)
+            {
+                if (_subscribers.TryGetValue(typeof(T), out ISubscriberCollection collection))
+                {
+                    SubscriberCollection<T> typedCollection = (SubscriberCollection<T>)collection;
+                    typedCollection.Remove(handler);
+                    if (typedCollection.IsEmpty)
+                    {
+                        _subscribers.Remove(typeof(T));
+                    }
+                }
             }
         }
 
-        /// <summary>
-        /// Publish a message to all subscribed handlers.
-        /// </summary>
-        /// <typeparam name="T">The type of message being published.</typeparam>
-        /// <param name="message">The message to be published.</param>
         public void Publish<T>(T message)
         {
-            Type messageType = typeof(T);
-            if (_subscribers.ContainsKey(messageType))
+            Action<T>[] handlers;
+
+            lock (_gate)
             {
-                foreach (var handler in _subscribers[messageType])
+                SubscriberCollection<T> collection = GetOrCreateCollection<T>();
+                collection.CleanupDeadSubscribers();
+                if (!collection.HasSubscribers)
                 {
-                    // Invoke the handler
-                    handler.DynamicInvoke(message);
-                }
-            }
-            else
-            {
-                // If no subscribers, add the message to the pending queue
-                if (!_pendingMessages.ContainsKey(messageType))
-                {
-                    _pendingMessages[messageType] = new Queue<object>();
+                    collection.Enqueue(message);
+                    return;
                 }
 
-                _pendingMessages[messageType].Enqueue(message);
+                handlers = collection.GetActiveHandlers();
+            }
+
+            foreach (Action<T> handler in handlers)
+            {
+                InvokeHandlerSafely(handler, message);
+            }
+        }
+
+        public void Clear()
+        {
+            lock (_gate)
+            {
+                _subscribers.Clear();
+            }
+        }
+
+        private SubscriberCollection<T> GetOrCreateCollection<T>()
+        {
+            Type messageType = typeof(T);
+            if (!_subscribers.TryGetValue(messageType, out ISubscriberCollection collection))
+            {
+                collection = new SubscriberCollection<T>();
+                _subscribers[messageType] = collection;
+            }
+
+            return (SubscriberCollection<T>)collection;
+        }
+
+        private static void InvokeHandlerSafely<T>(Action<T> handler, T message)
+        {
+            try
+            {
+                handler(message);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+        }
+
+        private interface ISubscriberCollection
+        {
+        }
+
+        private sealed class MessageSubscription : IMessageSubscription
+        {
+            private Action _disposeAction;
+
+            public MessageSubscription(Action disposeAction)
+            {
+                _disposeAction = disposeAction;
+            }
+
+            public void Dispose()
+            {
+                _disposeAction?.Invoke();
+                _disposeAction = null;
+            }
+        }
+
+        private sealed class SubscriberCollection<T> : ISubscriberCollection
+        {
+            private readonly List<Subscriber<T>> _handlers = new();
+            private readonly Queue<T> _pendingMessages = new();
+
+            public bool HasSubscribers => _handlers.Count > 0;
+            public bool IsEmpty => _handlers.Count == 0 && _pendingMessages.Count == 0;
+
+            public void Add(Action<T> handler)
+            {
+                _handlers.Add(new Subscriber<T>(handler));
+            }
+
+            public void Remove(Action<T> handler)
+            {
+                _handlers.RemoveAll(item => item.Matches(handler));
+            }
+
+            public void Enqueue(T message)
+            {
+                _pendingMessages.Enqueue(message);
+            }
+
+            public void CleanupDeadSubscribers()
+            {
+                _handlers.RemoveAll(item => !item.IsAlive);
+            }
+
+            public Action<T>[] GetActiveHandlers()
+            {
+                CleanupDeadSubscribers();
+                Action<T>[] results = new Action<T>[_handlers.Count];
+                for (int i = 0; i < _handlers.Count; i++)
+                {
+                    results[i] = _handlers[i].Handler;
+                }
+
+                return results;
+            }
+
+            public List<T> DrainPendingMessages()
+            {
+                List<T> pending = null;
+                while (_pendingMessages.Count > 0)
+                {
+                    pending ??= new List<T>();
+                    pending.Add(_pendingMessages.Dequeue());
+                }
+
+                return pending;
+            }
+        }
+
+        private sealed class Subscriber<T>
+        {
+            private readonly UnityEngine.Object _unityOwner;
+            private readonly bool _hasUnityOwner;
+
+            public Subscriber(Action<T> handler)
+            {
+                Handler = handler;
+                if (handler.Target is UnityEngine.Object unityObject)
+                {
+                    _unityOwner = unityObject;
+                    _hasUnityOwner = true;
+                }
+            }
+
+            public Action<T> Handler { get; }
+
+            public bool IsAlive => !_hasUnityOwner || _unityOwner != null;
+
+            public bool Matches(Action<T> handler)
+            {
+                return Handler == handler;
             }
         }
     }

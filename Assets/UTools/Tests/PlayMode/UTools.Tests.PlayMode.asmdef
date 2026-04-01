@@ -1,0 +1,19 @@
+{
+  "name": "UTools.Tests.PlayMode",
+  "rootNamespace": "UTools.Tests",
+  "references": [
+    "UTools.Runtime"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "noEngineReferences": false
+}

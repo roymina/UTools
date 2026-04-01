@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 
 namespace UTools
@@ -26,12 +25,6 @@ namespace UTools
             return this;
         }
 
-        public IBindingBuilder WithId(object identifier)
-        {
-            BindInfo.Identifier = identifier;
-            return this;
-        }
-
         public IBindingBuilder AsSingle()
         {
             BindInfo.Scope = BindingScope.Singleton;
@@ -50,12 +43,6 @@ namespace UTools
             return this;
         }
 
-        public IBindingBuilder OnInstantiated(Action<object> action)
-        {
-            // TODO: 实现实例化回调
-            return this;
-        }
-
         public IBindingBuilder FromInstance(object instance)
         {
             BindInfo.Instance = instance;
@@ -71,6 +58,7 @@ namespace UTools
         public IBindingBuilder NonLazy()
         {
             BindInfo.NonLazy = true;
+            Container.FinalizeBinding(BindInfo);
             return this;
         }
     }
@@ -94,12 +82,6 @@ namespace UTools
             return this;
         }
 
-        public new IBindingBuilder<TContract> WithId(object identifier)
-        {
-            base.WithId(identifier);
-            return this;
-        }
-
         public new IBindingBuilder<TContract> AsSingle()
         {
             base.AsSingle();
@@ -115,12 +97,6 @@ namespace UTools
         public new IBindingBuilder<TContract> InScope(BindingScope scope)
         {
             base.InScope(scope);
-            return this;
-        }
-
-        public IBindingBuilder<TContract> OnInstantiated(Action<TContract> action)
-        {
-            base.OnInstantiated(obj => action((TContract)obj));
             return this;
         }
 
