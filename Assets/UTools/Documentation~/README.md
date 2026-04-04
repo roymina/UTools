@@ -24,5 +24,5 @@ UTools is a lightweight Unity toolkit focused on four areas:
 
 Use the Unity Test Runner for:
 
-- `Packages/com.roymina.utools/Tests/EditMode`
-- `Packages/com.roymina.utools/Tests/PlayMode`
+- `Assets/UTools/Tests/EditMode`
+- `Assets/UTools/Tests/PlayMode`

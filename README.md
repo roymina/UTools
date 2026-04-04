@@ -53,7 +53,7 @@ Notes:
 
 Add the package with:
 
-`https://github.com/roymina/UTools.git?path=/Packages/com.roymina.utools`
+`https://github.com/roymina/UTools.git?path=/Assets/UTools`
 
 `TextMeshPro` is pulled in through the official Unity package dependency `com.unity.textmeshpro`.
 If the imported samples show missing TMP assets, run `Window > TextMeshPro > Import TMP Essential Resources` once.
@@ -64,7 +64,7 @@ Use the packaged release artifact if you want a simpler import flow.
 
 ### Option 3: Local embedded package workflow
 
-This repository now includes package-oriented metadata under `Packages/com.roymina.utools`, including:
+This repository now includes package-oriented metadata under `Assets/UTools`, including:
 
 - `package.json`
 - `Documentation~/`
@@ -246,8 +246,8 @@ This injects the prefab root and all child `MonoBehaviour` components.
 
 The project now includes Unity Test Framework entry points:
 
-- `Packages/com.roymina.utools/Tests/EditMode`
-- `Packages/com.roymina.utools/Tests/PlayMode`
+- `Assets/UTools/Tests/EditMode`
+- `Assets/UTools/Tests/PlayMode`
 
 Current automated validation in this repository:
 
@@ -256,11 +256,11 @@ Current automated validation in this repository:
 
 ## Repository Structure
 
-- `Packages/com.roymina.utools/Scripts`: runtime and editor source
-- `Packages/com.roymina.utools/Samples~`: sample scenes and scripts
-- `Packages/com.roymina.utools/Tests`: EditMode and PlayMode tests
-- `Packages/com.roymina.utools/Documentation~`: package documentation
-- `Packages/com.roymina.utools/README.md`: package entry documentation
+- `Assets/UTools/Scripts`: runtime and editor source
+- `Assets/UTools/Example`: sample scenes and scripts
+- `Assets/UTools/Tests`: EditMode and PlayMode tests
+- `Assets/UTools/Documentation~`: package documentation
+- `Assets/UTools/Samples~`: package sample placeholders
 
 ## Status
 
