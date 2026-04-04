@@ -51,9 +51,11 @@ UTools 是一个轻量级 Unity 工具集，覆盖依赖注入、消息系统、
 
 ### 方式 1：Git URL / UPM 安装
 
-通过 Package Manager 添加：
+在 `Package Manager` 中选择 `Add package from git URL...`，填入：
 
 `https://github.com/roymina/UTools.git?path=/Assets/UTools`
+
+仓库本身仍然保持为普通 Unity 工程，而 `Assets/UTools` 作为可安装的包根目录对外提供。
 
 `TextMeshPro` 通过 Unity 官方包依赖 `com.unity.textmeshpro` 自动引入。
 如果导入示例后出现 TMP 资源缺失，执行一次 `Window > TextMeshPro > Import TMP Essential Resources`。

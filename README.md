@@ -51,12 +51,14 @@ Notes:
 
 ### Option 1: Git URL / UPM
 
-Add the package with:
+In `Package Manager`, choose `Add package from git URL...` and use:
 
 `https://github.com/roymina/UTools.git?path=/Assets/UTools`
 
+This repository stays as a normal Unity project, while `Assets/UTools` is exposed as the installable package root.
+
 `TextMeshPro` is pulled in through the official Unity package dependency `com.unity.textmeshpro`.
-If the imported samples show missing TMP assets, run `Window > TextMeshPro > Import TMP Essential Resources` once.
+If imported samples show missing TMP assets, run `Window > TextMeshPro > Import TMP Essential Resources` once.
 
 ### Option 2: `unitypackage`
 
