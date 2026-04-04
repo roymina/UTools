@@ -2,107 +2,78 @@
 
 # UTools
 
-UTools 是一个轻量级 Unity 工具集，覆盖依赖注入、消息系统、对象查找和常用运行时辅助能力。它的目标是保持体积小、项目内可直接使用，同时方便整理成可复用插件。
+UTools 是一个轻量级 Unity 工具集，主要包含四个实用模块：
 
-## 模块说明
-
-### UDI
-
-- 通过 `[Inject]` 支持字段、属性、方法注入
-- 通过 `UDIContext` 支持场景级和层级容器
-- 支持运行时生命周期接口：`IInitializable`、`ITickable`、`ILateTickable`、`IFixedTickable`、`IUDisposable`、`IPausable`
-- 支持 `NonLazy()`
-- 支持 `TryResolve<T>()` / `TryResolve(Type, out object)`
-- 支持场景对象和实例化预制体上的 `MonoBehaviour` 注入
-
-说明：
-
-- 不支持构造函数注入。
-- `UDIInstallerBase` 仍保留用于兼容旧场景，但已经是旧入口。
-- `WithId`、自定义 `Scoped` 语义、按标识符解析等高级能力不是当前推荐 API。
-
-### UMessage
-
-- 强类型发布 / 订阅
-- 支持可释放的订阅句柄
-- 支持“先发布、后订阅”的待处理消息回放
-- 会自动清理已经销毁的 `UnityEngine.Object` 订阅目标
-
-### UFind
-
-- `[Child]` 子对象查找
-- `[Comp]` 当前对象组件查找
-- `[Resource]` 资源自动加载
-- 反射元数据缓存，减少重复启动扫描
-- 支持路径形式的子节点查找，例如 `[Child("Root/Panel/Button")]`
-
-### UUtils
-
-- 提供字符串、时间、文件、GameObject、网格、颜色、UI 等扩展方法
-- 持久化目录读写现在会自动创建缺失目录
-
-### Editor 辅助
-
-- `ButtonAttribute`
-- `ShowIfAttribute`
-- `AutoComponentAttribute`
+- `UDI`：依赖注入与运行时生命周期管理
+- `UFind`：基于特性的组件、子节点、资源自动绑定
+- `UMessage`：强类型发布/订阅消息系统
+- `UUtils`：字符串、文件、UI、网格、纹理、GameObject 等常用工具
 
 ## 安装方式
 
-### 方式 1：Git URL / UPM 安装
+### Git URL / UPM
 
 在 `Package Manager` 中选择 `Add package from git URL...`，填入：
 
 `https://github.com/roymina/UTools.git?path=/Assets/UTools`
 
-仓库本身仍然保持为普通 Unity 工程，而 `Assets/UTools` 作为可安装的包根目录对外提供。
+仓库本身仍然保持为普通 Unity 工程，而 `Assets/UTools` 对外作为可安装的包根目录。
 
 `TextMeshPro` 通过 Unity 官方包依赖 `com.unity.textmeshpro` 自动引入。
 如果导入示例后出现 TMP 资源缺失，执行一次 `Window > TextMeshPro > Import TMP Essential Resources`。
 
-### 方式 2：使用 `unitypackage`
+### `unitypackage`
 
-如果你更偏好一次性导入，可以使用打包后的发布文件。
+如果你更偏好手动导入，可以使用 `Releases/` 目录下的发布文件。
 
-### 方式 3：本地嵌入式包工作流
+## 模块说明
 
-仓库已经补齐了面向包化的基础元数据，位于 `Assets/UTools`：
+### UDI
 
-- `package.json`
-- `Documentation~/`
-- `Samples~/`
-- `CHANGELOG.md`
-- 运行时、编辑器、示例、测试对应的 `asmdef`
+- 通过 `UDIContext` 作为依赖注入入口
+- 通过 `[Inject]` 支持字段、属性、方法注入
+- 通过 `[PostInjection]` 支持注入完成后的回调
+- 支持 `IInitializable`、`ITickable`、`ILateTickable`、`IFixedTickable`、`IUDisposable`、`IPausable`
+- 支持 `AsSingle()`、`AsTransient()`、`InScope(...)`、`FromInstance(...)`、`FromGameObject(...)`、`NonLazy()`
+- 支持通过 `UGameObjectFactory` 对实例化预制体及其子节点进行注入
 
-## 推荐接入方式
+说明：
 
-推荐入口是 `UDIContext`。
+- 当前不支持构造函数注入。
+- 当前代码中没有 `UDIInstallerBase`。
+- 推荐使用 `MonoInstaller` 和 `ScriptableObjectInstaller`。
 
-1. 在场景根节点添加 `UDIContext`
-2. 绑定一个或多个 `MonoInstaller` / `ScriptableObjectInstaller`
-3. 在 `InstallBindings` 中注册服务
-4. 在运行时脚本中通过 `[Inject]` 获取依赖
+#### UDI 示例：注册服务并启动场景 Context
 
 ```csharp
-using UTools;
 using UnityEngine;
+using UTools;
 
 public interface ILogger
 {
     void Log(string message);
 }
 
-public class UnityLogger : ILogger
+public sealed class UnityLogger : ILogger
 {
-    public void Log(string message) => Debug.Log(message);
+    public void Log(string message)
+    {
+        Debug.Log(message);
+    }
 }
 
-public class GameInstaller : MonoInstaller
+public sealed class GameInstaller : MonoInstaller
 {
+    [SerializeField] private Transform spawnRoot;
+
     public override void InstallBindings(UDIContainer container)
     {
         container.Bind<ILogger>()
             .To<UnityLogger>()
+            .AsSingle();
+
+        container.Bind<Transform>()
+            .FromInstance(spawnRoot)
             .AsSingle();
 
         container.Bind<GameManager>()
@@ -113,16 +84,36 @@ public class GameInstaller : MonoInstaller
 }
 ```
 
+#### UDI 示例：字段、属性、方法与注入后回调
+
 ```csharp
+using UnityEngine;
 using UTools;
 
-public class GameManager : IInitializable, ITickable
+public sealed class GameManager : IInitializable, ITickable
 {
     [Inject] private ILogger _logger;
+
+    [Inject]
+    public Transform SpawnRoot { get; private set; }
+
+    private Camera _mainCamera;
+
+    [Inject]
+    private void Construct(Camera mainCamera)
+    {
+        _mainCamera = mainCamera;
+    }
 
     public void Initialize()
     {
         _logger.Log("GameManager initialized");
+    }
+
+    [PostInjection]
+    private void AfterInject()
+    {
+        _logger.Log($"Spawn root: {SpawnRoot.name}, camera: {_mainCamera.name}");
     }
 
     public void Tick()
@@ -131,144 +122,205 @@ public class GameManager : IInitializable, ITickable
 }
 ```
 
-## 全局 Context 模式
-
-如果你需要跨场景服务，可以让 Context 所在对象常驻：
+#### UDI 示例：实例化预制体并自动注入
 
 ```csharp
 using UnityEngine;
 using UTools;
 
-public class ProjectContext : UDIContext
+public sealed class EnemySpawner : MonoBehaviour
 {
+    [SerializeField] private GameObject enemyPrefab;
+    [SerializeField] private Transform spawnPoint;
+
+    public void Spawn()
+    {
+        UGameObjectFactory.InstantiateWithDependency(
+            enemyPrefab,
+            spawnPoint.position,
+            spawnPoint.rotation);
+    }
+}
+```
+
+### UFind
+
+- `[Comp]` 绑定当前 GameObject 上的组件
+- `[Child]` 绑定子节点或子节点上的组件
+- `[Child("Root/Panel/Button")]` 支持路径查找
+- `[Resource]` 自动从 `Resources` 加载资源
+- `UBehaviour` 会缓存反射信息，减少重复扫描
+
+#### UFind 示例：自动绑定组件、子节点和资源
+
+```csharp
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+using UTools;
+
+public sealed class InventoryPanel : UBehaviour
+{
+    [Comp] public Canvas Canvas;
+    [Comp] public Button CloseButton;
+
+    [Child] public TextMeshProUGUI Title;
+    [Child("Content/Buttons/ConfirmButton")] public Button ConfirmButton;
+    [Child("Content/Icon")] public Image Icon;
+
+    [Resource("Icons/Inventory")] public Sprite InventorySprite;
+
     protected override void Awake()
     {
-        if (FindObjectsByType<ProjectContext>(FindObjectsSortMode.None).Length > 1)
-        {
-            Destroy(gameObject);
-            return;
-        }
-
-        DontDestroyOnLoad(gameObject);
         base.Awake();
+        Title.text = "Inventory";
+        Icon.sprite = InventorySprite;
     }
 }
 ```
 
-子 Context 可以通过层级关系继承父容器服务。
+#### UFind 行为说明
 
-## 旧方式
+- `[Child]` 不传参数时，默认使用字段名查找
+- 字段类型如果是 `GameObject`，会直接赋值子节点对象本身
+- 字段类型如果是组件，会先找到子节点，再从该节点上取组件
+- 如果有多个同名子节点，建议改用路径写法
 
-`UDIInstallerBase` 仍可用于老场景：
+### UMessage
+
+- 使用 `UMessageCenter.Instance`
+- 支持强类型 `Subscribe<T>()`、`Publish<T>()`、`Unsubscribe<T>()`
+- `Subscribe` 返回 `IMessageSubscription`，方便在 `OnDisable` 中释放
+- 默认支持“先发布、后订阅”的待处理消息回放
+- 会自动清理已经销毁的 `UnityEngine.Object` 订阅目标
+
+#### UMessage 示例：订阅、接收回放、释放订阅
 
 ```csharp
+using UnityEngine;
 using UTools;
 
-public class LegacyInstaller : UDIInstallerBase
+public sealed class ScoreChangedMessage
 {
-    protected override void RegisterServices()
+    public int Value;
+}
+
+public sealed class ScorePublisher : MonoBehaviour
+{
+    public void ReportScore(int score)
     {
-        Container.Register<LegacyService>();
+        UMessageCenter.Instance.Publish(new ScoreChangedMessage { Value = score });
     }
 }
-```
 
-新代码建议统一迁移到 `UDIContext`。
-
-## 消息系统示例
-
-```csharp
-using UTools;
-
-public class ExampleUsage
+public sealed class ScoreListener : MonoBehaviour
 {
     private IMessageSubscription _subscription;
 
-    public void Enable()
+    private void OnEnable()
     {
-        _subscription = UMessageCenter.Instance.Subscribe<MyMessage>(OnMessage);
+        _subscription = UMessageCenter.Instance.Subscribe<ScoreChangedMessage>(OnScoreChanged);
     }
 
-    public void Disable()
+    private void OnDisable()
     {
         _subscription?.Dispose();
         _subscription = null;
     }
 
-    public void Publish()
+    private void OnScoreChanged(ScoreChangedMessage message)
     {
-        UMessageCenter.Instance.Publish(new MyMessage { Text = "Hello" });
+        Debug.Log($"Score updated: {message.Value}");
     }
-
-    private void OnMessage(MyMessage message)
-    {
-        UnityEngine.Debug.Log(message.Text);
-    }
-}
-
-public class MyMessage
-{
-    public string Text;
 }
 ```
 
-如果消息在订阅者出现前就已经发布，默认情况下第一个后续订阅者仍会收到待处理消息回放。
-
-## UFind 示例
+#### UMessage 示例：关闭待处理消息回放
 
 ```csharp
-using TMPro;
+using UTools;
+
+IMessageSubscription subscription = UMessageCenter.Instance.Subscribe<ScoreChangedMessage>(
+    message => UnityEngine.Debug.Log(message.Value),
+    replayPending: false);
+```
+
+### UUtils
+
+`UUtils` 包含很多扩展与工具方法，常用类别包括：
+
+- 字符串辅助：`IsNullOrEmpty()`、`CheckUserName()`、`TrimLength()`
+- 时间辅助：`ToTimeString()`、`Tohhmmss()`
+- 持久化读写：`ReadFromPersistDataPath()`、`WriteToPersistDataPath()`
+- GameObject 操作：`FindChild()`、`GetAllDecendents()`、`ToggleAllChildren()`
+- UI 与资源辅助：`ToggleAsCanvasGroup()`、`ToSprite()`、`ToTexture2D()`、`TweenColor()`
+- 网格辅助：`CloneMesh()`、`CombineMesh()`、`GenerateQuadMesh()`
+
+#### UUtils 示例：字符串、时间和持久化读写
+
+```csharp
 using UnityEngine;
 using UTools;
 
-public class ExampleView : UBehaviour
+public sealed class UtilityExample : MonoBehaviour
 {
-    [Comp] public Canvas Canvas;
-    [Child] public TextMeshProUGUI Title;
-    [Child("Root/Buttons/Confirm")] public GameObject ConfirmButton;
-    [Resource("Icons/Logo")] public Sprite Logo;
+    private void Start()
+    {
+        string name = "player_one";
+        bool isValid = name.CheckUserName();
+        string shortName = "VeryLongDisplayName".TrimLength(10);
+        string timer = 95.ToTimeString();
+
+        UUtils.WriteToPersistDataPath("{\"volume\":0.8}", "user_settings.json");
+        string json = UUtils.ReadFromPersistDataPath("user_settings.json");
+
+        Debug.Log($"valid={isValid}, short={shortName}, timer={timer}, json={json}");
+    }
 }
 ```
 
-行为说明：
-
-- `[Child]` 不传参数时，默认用字段名查找
-- 如果同名子节点出现多个，UTools 会报错并要求改用路径查找
-
-## 带注入的实例化
-
-如果你需要在实例化预制体后完成注入，使用 `UGameObjectFactory`：
+#### UUtils 示例：GameObject 与 UI 操作
 
 ```csharp
-var instance = UGameObjectFactory.InstantiateWithDependency(prefab, parentTransform);
+using UnityEngine;
+using UTools;
+
+public sealed class UiHelperExample : MonoBehaviour
+{
+    [SerializeField] private GameObject panelRoot;
+    [SerializeField] private RectTransform popup;
+
+    public void ShowInventory()
+    {
+        GameObject closeButton = panelRoot.FindChild("CloseButton");
+        panelRoot.ToggleAllChildren(true);
+        popup.ToggleAsCanvasGroup(true, useTween: false);
+
+        if (closeButton != null)
+        {
+            Debug.Log($"Found child: {closeButton.name}");
+        }
+    }
+}
 ```
 
-这会对预制体根节点和其所有子节点上的 `MonoBehaviour` 一并执行注入。
+### Editor 辅助
+
+- `ButtonAttribute`
+- `ShowIfAttribute`
+- `AutoComponentAttribute`
 
 ## 测试
 
-项目现在已经补齐 Unity Test Framework 测试入口：
+项目已经包含 Unity Test Framework 测试入口：
 
 - `Assets/UTools/Tests/EditMode`
 - `Assets/UTools/Tests/PlayMode`
 
-当前仓库中的自动化验证方式：
-
-- `dotnet build utools.sln -nologo`
-- Unity 编辑器内的 EditMode / PlayMode Test Runner
-
 ## 仓库结构
 
 - `Assets/UTools/Scripts`：运行时与编辑器源码
-- `Assets/UTools/Example`：示例场景和示例脚本
+- `Assets/UTools/Example`：仓库内使用的示例场景与示例脚本
 - `Assets/UTools/Tests`：EditMode 与 PlayMode 测试
-- `Assets/UTools/Documentation~`：包内文档
-- `Assets/UTools/Samples~`：包内示例占位目录
-
-## 当前状态
-
-UTools 已经朝“可复用插件结构”做过一轮重构，但仍保留了部分兼容旧场景的桥接能力。对于新的开发，推荐统一采用下面这套方式：
-
-- `UDIContext`
-- `MonoInstaller` / `ScriptableObjectInstaller`
-- 使用可释放句柄的强类型 `UMessageCenter` 订阅
+- `Assets/UTools/Documentation~`：包文档
+- `Assets/UTools/Samples~`：包示例占位内容
