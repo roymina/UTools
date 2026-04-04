@@ -49,17 +49,22 @@ Notes:
 
 ## Installation
 
-### Option 1: Unity package / source drop-in
+### Option 1: Git URL / UPM
 
-Import the project content under `Assets/UTools` into your Unity project.
+Add the package with:
+
+`https://github.com/roymina/UTools.git?path=/Packages/com.roymina.utools`
+
+`TextMeshPro` is pulled in through the official Unity package dependency `com.unity.textmeshpro`.
+If the imported samples show missing TMP assets, run `Window > TextMeshPro > Import TMP Essential Resources` once.
 
 ### Option 2: `unitypackage`
 
 Use the packaged release artifact if you want a simpler import flow.
 
-### Option 3: Local package workflow
+### Option 3: Local embedded package workflow
 
-This repository now includes package-oriented metadata under `Assets/UTools`, including:
+This repository now includes package-oriented metadata under `Packages/com.roymina.utools`, including:
 
 - `package.json`
 - `Documentation~/`
@@ -241,8 +246,8 @@ This injects the prefab root and all child `MonoBehaviour` components.
 
 The project now includes Unity Test Framework entry points:
 
-- `Assets/UTools/Tests/EditMode`
-- `Assets/UTools/Tests/PlayMode`
+- `Packages/com.roymina.utools/Tests/EditMode`
+- `Packages/com.roymina.utools/Tests/PlayMode`
 
 Current automated validation in this repository:
 
@@ -251,11 +256,11 @@ Current automated validation in this repository:
 
 ## Repository Structure
 
-- `Assets/UTools/Scripts`: runtime and editor source
-- `Assets/UTools/Example`: sample scenes and scripts
-- `Assets/UTools/Tests`: EditMode and PlayMode tests
-- `Assets/UTools/Documentation~`: package documentation
-- `Assets/UTools/Samples~`: package sample placeholders
+- `Packages/com.roymina.utools/Scripts`: runtime and editor source
+- `Packages/com.roymina.utools/Samples~`: sample scenes and scripts
+- `Packages/com.roymina.utools/Tests`: EditMode and PlayMode tests
+- `Packages/com.roymina.utools/Documentation~`: package documentation
+- `Packages/com.roymina.utools/README.md`: package entry documentation
 
 ## Status
 

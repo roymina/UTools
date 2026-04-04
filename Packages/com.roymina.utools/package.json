@@ -1,9 +1,12 @@
 {
   "name": "com.roymina.utools",
   "displayName": "UTools",
-  "version": "0.2.0",
+  "version": "0.5.0",
   "unity": "2023.2",
   "description": "A lightweight Unity toolkit covering dependency injection, a message center, object lookup helpers, and utility extensions.",
+  "dependencies": {
+    "com.unity.textmeshpro": "3.0.9"
+  },
   "author": {
     "name": "Roy"
   },
@@ -13,12 +16,13 @@
     "message-bus",
     "utilities"
   ],
-  "documentationUrl": "Documentation~/README.md",
+  "documentationUrl": "https://github.com/roymina/UTools/blob/main/Packages/com.roymina.utools/README.md",
+  "changelogUrl": "https://github.com/roymina/UTools/blob/main/Packages/com.roymina.utools/CHANGELOG.md",
   "samples": [
     {
       "displayName": "UTools Example",
       "description": "Example scenes and scripts that demonstrate the main runtime modules.",
-      "path": "Samples~/Example"
+      "path": "Samples~"
     }
   ]
 }

@@ -49,17 +49,22 @@ UTools 是一个轻量级 Unity 工具集，覆盖依赖注入、消息系统、
 
 ## 安装方式
 
-### 方式 1：直接导入源码 / 包目录
+### 方式 1：Git URL / UPM 安装
 
-将 `Assets/UTools` 下的内容导入你的 Unity 项目。
+通过 Package Manager 添加：
+
+`https://github.com/roymina/UTools.git?path=/Packages/com.roymina.utools`
+
+`TextMeshPro` 通过 Unity 官方包依赖 `com.unity.textmeshpro` 自动引入。
+如果导入示例后出现 TMP 资源缺失，执行一次 `Window > TextMeshPro > Import TMP Essential Resources`。
 
 ### 方式 2：使用 `unitypackage`
 
 如果你更偏好一次性导入，可以使用打包后的发布文件。
 
-### 方式 3：本地包工作流
+### 方式 3：本地嵌入式包工作流
 
-仓库已经补齐了面向包化的基础元数据，位于 `Assets/UTools`：
+仓库已经补齐了面向包化的基础元数据，位于 `Packages/com.roymina.utools`：
 
 - `package.json`
 - `Documentation~/`
@@ -242,8 +247,8 @@ var instance = UGameObjectFactory.InstantiateWithDependency(prefab, parentTransf
 
 项目现在已经补齐 Unity Test Framework 测试入口：
 
-- `Assets/UTools/Tests/EditMode`
-- `Assets/UTools/Tests/PlayMode`
+- `Packages/com.roymina.utools/Tests/EditMode`
+- `Packages/com.roymina.utools/Tests/PlayMode`
 
 当前仓库中的自动化验证方式：
 
@@ -252,11 +257,11 @@ var instance = UGameObjectFactory.InstantiateWithDependency(prefab, parentTransf
 
 ## 仓库结构
 
-- `Assets/UTools/Scripts`：运行时与编辑器源码
-- `Assets/UTools/Example`：示例场景和示例脚本
-- `Assets/UTools/Tests`：EditMode 与 PlayMode 测试
-- `Assets/UTools/Documentation~`：包内文档
-- `Assets/UTools/Samples~`：包内示例占位目录
+- `Packages/com.roymina.utools/Scripts`：运行时与编辑器源码
+- `Packages/com.roymina.utools/Samples~`：示例场景和示例脚本
+- `Packages/com.roymina.utools/Tests`：EditMode 与 PlayMode 测试
+- `Packages/com.roymina.utools/Documentation~`：包内文档
+- `Packages/com.roymina.utools/README.md`：包入口文档
 
 ## 当前状态
 
