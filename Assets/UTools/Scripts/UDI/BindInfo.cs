@@ -11,6 +11,8 @@ namespace UTools
         public bool NonLazy { get; set; }
         public bool IsMonoBehaviour { get; set; }
         public GameObject GameObjectContext { get; set; }
+        public bool IsGlobal { get; set; }
+        public bool RequiredForContextStart { get; set; }
     }
 
     public enum BindingScope

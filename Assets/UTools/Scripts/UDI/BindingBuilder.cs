@@ -55,6 +55,18 @@ namespace UTools
             return this;
         }
 
+        public IBindingBuilder AsGlobal()
+        {
+            Container.MarkBindingGlobal(BindInfo);
+            return this;
+        }
+
+        public IBindingBuilder RequiredForContextStart()
+        {
+            Container.MarkBindingRequiredForContextStart(BindInfo);
+            return this;
+        }
+
         public IBindingBuilder NonLazy()
         {
             BindInfo.NonLazy = true;
@@ -103,6 +115,18 @@ namespace UTools
         public IBindingBuilder<TContract> FromInstance(TContract instance)
         {
             base.FromInstance(instance);
+            return this;
+        }
+
+        public new IBindingBuilder<TContract> AsGlobal()
+        {
+            base.AsGlobal();
+            return this;
+        }
+
+        public new IBindingBuilder<TContract> RequiredForContextStart()
+        {
+            base.RequiredForContextStart();
             return this;
         }
 

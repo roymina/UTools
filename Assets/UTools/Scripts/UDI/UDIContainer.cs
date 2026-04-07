@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace UTools
@@ -9,15 +11,19 @@ namespace UTools
     {
         private readonly Dictionary<Type, object> _services = new();
         private readonly Dictionary<Type, BindInfo> _bindings = new();
+        private readonly List<BindInfo> _bindingOrder = new();
         private readonly HashSet<object> _initializedInstances = new();
+        private readonly HashSet<object> _asyncInitializedInstances = new();
         private readonly UDIContainer _parentContainer;
+        private readonly bool _allowGlobalBindings;
 
         private LifecycleManager _lifecycleManager;
 
-        public UDIContainer(UDIContainer parentContainer = null, LifecycleManager lifecycleManager = null)
+        public UDIContainer(UDIContainer parentContainer = null, LifecycleManager lifecycleManager = null, bool allowGlobalBindings = false)
         {
             _parentContainer = parentContainer;
             _lifecycleManager = lifecycleManager;
+            _allowGlobalBindings = allowGlobalBindings;
         }
 
         public void SetLifecycleManager(LifecycleManager lifecycleManager)
@@ -35,6 +41,7 @@ namespace UTools
             };
 
             _bindings[typeof(T)] = bindInfo;
+            ReplaceBindingOrder(bindInfo);
             return new BindingBuilder<T>(bindInfo, this);
         }
 
@@ -49,7 +56,38 @@ namespace UTools
             };
 
             _bindings[typeof(TContract)] = bindInfo;
+            ReplaceBindingOrder(bindInfo);
             return new BindingBuilder<TContract>(bindInfo, this);
+        }
+
+        public async Task InitializeRequiredForContextStartAsync(CancellationToken cancellationToken)
+        {
+            foreach (BindInfo bindInfo in _bindingOrder.Where(item => item.RequiredForContextStart).ToArray())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                object instance = Resolve(bindInfo.ContractType);
+                if (instance is IAsyncInitializable asyncInitializable && _asyncInitializedInstances.Add(instance))
+                {
+                    await asyncInitializable.InitializeAsync(cancellationToken);
+                }
+            }
+        }
+
+        internal void MarkBindingGlobal(BindInfo bindInfo)
+        {
+            if (!_allowGlobalBindings)
+            {
+                throw new InvalidOperationException("AsGlobal() can only be used from the dedicated GlobalInstaller.");
+            }
+
+            bindInfo.IsGlobal = true;
+            bindInfo.Scope = BindingScope.Singleton;
+        }
+
+        internal void MarkBindingRequiredForContextStart(BindInfo bindInfo)
+        {
+            bindInfo.RequiredForContextStart = true;
+            bindInfo.NonLazy = true;
         }
 
         internal void FinalizeBinding(BindInfo bindInfo)
@@ -427,6 +465,12 @@ namespace UTools
         private static bool CanAutoCreate(Type type)
         {
             return !type.IsAbstract && !type.IsInterface && !type.ContainsGenericParameters;
+        }
+
+        private void ReplaceBindingOrder(BindInfo bindInfo)
+        {
+            _bindingOrder.RemoveAll(item => item.ContractType == bindInfo.ContractType);
+            _bindingOrder.Add(bindInfo);
         }
     }
 

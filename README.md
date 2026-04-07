@@ -33,8 +33,8 @@ Use the packaged release artifact in `Releases/` if you prefer manual import.
 - Uses `UDIContext` as the DI entry point
 - Supports field, property, and method injection via `[Inject]`
 - Supports post-injection callbacks via `[PostInjection]`
-- Supports `IInitializable`, `ITickable`, `ILateTickable`, `IFixedTickable`, `IUDisposable`, `IPausable`
-- Supports `AsSingle()`, `AsTransient()`, `InScope(...)`, `FromInstance(...)`, `FromGameObject(...)`, `NonLazy()`
+- Supports `IInitializable`, `IAsyncInitializable`, `ITickable`, `ILateTickable`, `IFixedTickable`, `IUDisposable`, `IPausable`
+- Supports `AsSingle()`, `AsTransient()`, `InScope(...)`, `FromInstance(...)`, `FromGameObject(...)`, `AsGlobal()`, `RequiredForContextStart()`, `NonLazy()`
 - Supports scene injection and injected prefab instantiation through `UGameObjectFactory`
 
 Notes:
@@ -42,6 +42,8 @@ Notes:
 - Constructor injection is not supported.
 - There is no `UDIInstallerBase` in the current codebase.
 - `MonoInstaller` and `ScriptableObjectInstaller` are the supported installer types.
+- `GlobalInstaller` assets must be placed under `Resources` to enable hidden cross-scene global injection.
+- `ManagedContentRoot` is the recommended way to hold content inactive until required async services finish.
 
 #### UDI Example: register services and start a scene context
 
@@ -139,6 +141,55 @@ public sealed class EnemySpawner : MonoBehaviour
             enemyPrefab,
             spawnPoint.position,
             spawnPoint.rotation);
+    }
+}
+```
+
+#### UDI Example: register a cross-scene global fallback service
+
+```csharp
+using UnityEngine;
+using UTools;
+
+[CreateAssetMenu(menuName = "UTools/Global Installer")]
+public sealed class GameGlobalInstaller : GlobalInstaller
+{
+    public override void InstallBindings(UDIContainer container)
+    {
+        container.Bind<IClock>()
+            .To<UnityClock>()
+            .AsSingle()
+            .AsGlobal();
+    }
+}
+```
+
+#### UDI Example: block a context until async services are ready
+
+```csharp
+using System.Threading;
+using System.Threading.Tasks;
+using UnityEngine;
+using UTools;
+
+public sealed class AsyncConfigInstaller : MonoInstaller
+{
+    [SerializeField] private ConfigService configService;
+
+    public override void InstallBindings(UDIContainer container)
+    {
+        container.Bind<ConfigService>()
+            .FromInstance(configService)
+            .AsSingle()
+            .RequiredForContextStart();
+    }
+}
+
+public sealed class ConfigService : IAsyncInitializable
+{
+    public Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
     }
 }
 ```

@@ -1,60 +1,59 @@
 using System.Collections.Generic;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 namespace UTools
 {
+    [DefaultExecutionOrder(-10000)]
     public class UDIContext : MonoBehaviour
     {
         [SerializeField]
         private List<MonoInstaller> _installers = new();
         [SerializeField]
         private List<ScriptableObjectInstaller> _scriptableObjectInstallers = new();
+        [SerializeField]
+        private GameObject _managedContentRoot;
 
         private UDIContainer _container;
         private LifecycleManager _lifecycleManager;
         private bool _hasInitialized;
+        private bool _isInitializing;
+        private CancellationTokenSource _initializationCancellation;
+        private Task _readyTask;
 
         public UDIContainer Container => _container;
         public LifecycleManager LifecycleManager => _lifecycleManager;
+        public bool IsReady { get; private set; }
+        public Task ReadyTask => _readyTask ?? Task.CompletedTask;
+        public Exception InitializationException { get; private set; }
+        public GameObject ManagedContentRoot => _managedContentRoot;
 
         protected virtual void Awake()
         {
             Initialize();
         }
 
+        protected virtual void OnDestroy()
+        {
+            _initializationCancellation?.Cancel();
+            _initializationCancellation?.Dispose();
+        }
+
         public void Initialize()
         {
-            if (_hasInitialized)
+            if (_readyTask == null)
             {
-                return;
+                _readyTask = InitializeAsyncInternal();
             }
+        }
 
-            _hasInitialized = true;
-            _lifecycleManager = GetComponent<LifecycleManager>();
-            if (_lifecycleManager == null)
-            {
-                _lifecycleManager = gameObject.AddComponent<LifecycleManager>();
-            }
-
-            UDIContext parentContext = GetParentContext();
-            UDIContainer parentContainer = parentContext?.Container;
-
-            _container = new UDIContainer(parentContainer, _lifecycleManager);
-            _container.Bind<LifecycleManager>()
-                .FromInstance(_lifecycleManager)
-                .AsSingle();
-
-            InstallBindings();
-            _container.FinalizeBindings();
-            InjectContextObjects(parentContainer == null);
-
-            if (parentContainer == null)
-            {
-                UGameObjectFactory.SetContainer(_container);
-            }
-
-            _lifecycleManager.Initialize();
+        public Task InitializeAsync()
+        {
+            Initialize();
+            return ReadyTask;
         }
 
         private void InstallBindings()
@@ -87,8 +86,69 @@ namespace UTools
             }
         }
 
+        private async Task InitializeAsyncInternal()
+        {
+            if (_hasInitialized || _isInitializing)
+            {
+                return;
+            }
+
+            _hasInitialized = true;
+            _isInitializing = true;
+            IsReady = false;
+            InitializationException = null;
+            _initializationCancellation = new CancellationTokenSource();
+
+            PrepareManagedContentRoot();
+
+            try
+            {
+                _lifecycleManager = GetComponent<LifecycleManager>();
+                if (_lifecycleManager == null)
+                {
+                    _lifecycleManager = gameObject.AddComponent<LifecycleManager>();
+                }
+
+                UDIContainer parentContainer = await ResolveParentContainerAsync();
+                _container = new UDIContainer(parentContainer, _lifecycleManager);
+                _container.Bind<LifecycleManager>()
+                    .FromInstance(_lifecycleManager)
+                    .AsSingle();
+
+                InstallBindings();
+                _container.FinalizeBindings();
+                await _container.InitializeRequiredForContextStartAsync(_initializationCancellation.Token);
+
+                InjectContextObjects(parentContainer == null && _managedContentRoot == null);
+                _lifecycleManager.Initialize();
+                ActivateManagedContentRoot();
+                IsReady = true;
+
+                if (parentContainer == null && !UDIGlobalRuntime.HasGlobalContainer)
+                {
+                    UGameObjectFactory.SetContainer(_container);
+                }
+            }
+            catch (Exception exception)
+            {
+                InitializationException = exception;
+                Debug.LogError($"UDIContext '{name}' failed to initialize: {exception}");
+                throw;
+            }
+            finally
+            {
+                _isInitializing = false;
+            }
+        }
+
         private void InjectContextObjects(bool injectWholeScene)
         {
+            if (_managedContentRoot != null)
+            {
+                _container.InjectGameObject(_managedContentRoot);
+                return;
+            }
+
             if (injectWholeScene)
             {
                 Scene scene = gameObject.scene;
@@ -118,6 +178,46 @@ namespace UTools
 
             return null;
         }
+
+        private async Task<UDIContainer> ResolveParentContainerAsync()
+        {
+            UDIContext parentContext = GetParentContext();
+            if (parentContext != null)
+            {
+                await parentContext.InitializeAsync();
+                return parentContext.Container;
+            }
+
+            if (UDIGlobalRuntime.HasGlobalContainer)
+            {
+                await UDIGlobalRuntime.EnsureInitializedAsync();
+                return UDIGlobalRuntime.Container;
+            }
+
+            return null;
+        }
+
+        private void PrepareManagedContentRoot()
+        {
+            if (_managedContentRoot == null)
+            {
+                return;
+            }
+
+            if (_managedContentRoot.activeSelf)
+            {
+                Debug.LogWarning($"ManagedContentRoot '{_managedContentRoot.name}' should start inactive so UDIContext can guarantee async readiness.");
+                _managedContentRoot.SetActive(false);
+            }
+        }
+
+        private void ActivateManagedContentRoot()
+        {
+            if (_managedContentRoot != null)
+            {
+                _managedContentRoot.SetActive(true);
+            }
+        }
     }
 
     public abstract class MonoInstaller : MonoBehaviour, IInstaller
@@ -145,6 +245,10 @@ namespace UTools
     public abstract class ScriptableObjectInstaller : ScriptableObject, IInstaller
     {
         public abstract void InstallBindings(UDIContainer container);
+    }
+
+    public abstract class GlobalInstaller : ScriptableObjectInstaller
+    {
     }
 
     public interface IInstaller

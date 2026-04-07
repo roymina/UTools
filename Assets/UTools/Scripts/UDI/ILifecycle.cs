@@ -1,8 +1,16 @@
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace UTools
 {
     public interface IInitializable
     {
         void Initialize();
+    }
+
+    public interface IAsyncInitializable
+    {
+        Task InitializeAsync(CancellationToken cancellationToken);
     }
 
     public interface ITickable

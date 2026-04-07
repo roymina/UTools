@@ -11,6 +11,8 @@ namespace UTools
         IBindingBuilder InScope(BindingScope scope);
         IBindingBuilder FromInstance(object instance);
         IBindingBuilder FromGameObject(GameObject gameObject);
+        IBindingBuilder AsGlobal();
+        IBindingBuilder RequiredForContextStart();
         IBindingBuilder NonLazy();
     }
 
@@ -22,6 +24,8 @@ namespace UTools
         new IBindingBuilder<TContract> AsTransient();
         new IBindingBuilder<TContract> InScope(BindingScope scope);
         IBindingBuilder<TContract> FromInstance(TContract instance);
+        new IBindingBuilder<TContract> AsGlobal();
+        new IBindingBuilder<TContract> RequiredForContextStart();
         new IBindingBuilder<TContract> NonLazy();
     }
 }
