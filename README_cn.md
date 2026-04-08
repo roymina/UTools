@@ -5,8 +5,8 @@
 UTools 是一个轻量级 Unity 工具集，主要包含四个实用模块：
 
 - `UDI`：依赖注入与运行时生命周期管理
-- `UFind`：基于特性的组件、子节点、资源自动绑定
-- `UMessage`：强类型发布/订阅消息系统
+- `UFind`：基于特性的组件、子节点与资源自动绑定
+- `UMessage`：强类型发布 / 订阅消息系统
 - `UUtils`：字符串、文件、UI、网格、纹理、GameObject 等常用工具
 
 ## 安装方式
@@ -19,29 +19,33 @@ UTools 是一个轻量级 Unity 工具集，主要包含四个实用模块：
 
 仓库本身仍然保持为普通 Unity 工程，而 `Assets/UTools` 对外作为可安装的包根目录。
 
-`TextMeshPro` 通过 Unity 官方包依赖 `com.unity.textmeshpro` 自动引入。
-如果导入示例后出现 TMP 资源缺失，执行一次 `Window > TextMeshPro > Import TMP Essential Resources`。
+`TextMeshPro` 会通过 Unity 官方包依赖 `com.unity.textmeshpro` 自动引入。  
+如果导入示例后出现 TMP 资源缺失，请执行一次：
+
+`Window > TextMeshPro > Import TMP Essential Resources`
 
 ### `unitypackage`
 
-如果你更偏好手动导入，可以使用 `Releases/` 目录下的发布文件。
+如果你更偏好手动导入，也可以直接使用 `Releases/` 目录中的发布文件。
 
 ## 模块说明
 
 ### UDI
 
-- 通过 `UDIContext` 作为依赖注入入口
+- 使用 `UDIContext` 作为依赖注入入口
 - 通过 `[Inject]` 支持字段、属性、方法注入
 - 通过 `[PostInjection]` 支持注入完成后的回调
-- 支持 `IInitializable`、`ITickable`、`ILateTickable`、`IFixedTickable`、`IUDisposable`、`IPausable`
-- 支持 `AsSingle()`、`AsTransient()`、`InScope(...)`、`FromInstance(...)`、`FromGameObject(...)`、`NonLazy()`
-- 支持通过 `UGameObjectFactory` 对实例化预制体及其子节点进行注入
+- 支持 `IInitializable`、`IAsyncInitializable`、`ITickable`、`ILateTickable`、`IFixedTickable`、`IUDisposable`、`IPausable`
+- 支持 `AsSingle()`、`AsTransient()`、`InScope(...)`、`FromInstance(...)`、`FromGameObject(...)`、`AsGlobal()`、`RequiredForContextStart()`、`NonLazy()`
+- 支持通过 `UGameObjectFactory` 对运行时实例化对象进行注入
 
 说明：
 
-- 当前不支持构造函数注入。
-- 当前代码中没有 `UDIInstallerBase`。
-- 推荐使用 `MonoInstaller` 和 `ScriptableObjectInstaller`。
+- 当前不支持构造函数注入
+- 当前没有 `UDIInstallerBase`
+- 推荐使用 `MonoInstaller` 与 `ScriptableObjectInstaller`
+- `GlobalInstaller` 资源需放在 `Resources` 目录下，才能启用跨场景全局注入
+- 当上下文依赖耗时初始化服务时，推荐使用 `ManagedContentRoot` 延迟激活场景内容
 
 #### UDI 示例：注册服务并启动场景 Context
 
@@ -122,7 +126,7 @@ public sealed class GameManager : IInitializable, ITickable
 }
 ```
 
-#### UDI 示例：实例化预制体并自动注入
+#### UDI 示例：实例化 Prefab 并自动注入
 
 ```csharp
 using UnityEngine;
@@ -143,6 +147,70 @@ public sealed class EnemySpawner : MonoBehaviour
 }
 ```
 
+#### UDI 示例：注册跨场景全局服务
+
+```csharp
+using UnityEngine;
+using UTools;
+
+[CreateAssetMenu(menuName = "UTools/Global Installer")]
+public sealed class GameGlobalInstaller : GlobalInstaller
+{
+    public override void InstallBindings(UDIContainer container)
+    {
+        container.Bind<IClock>()
+            .To<UnityClock>()
+            .AsSingle()
+            .AsGlobal();
+    }
+}
+```
+
+#### UDI 示例：等待异步服务就绪后再启动场景内容
+
+```csharp
+using System.Threading;
+using System.Threading.Tasks;
+using UnityEngine;
+using UTools;
+
+public sealed class AsyncConfigInstaller : MonoInstaller
+{
+    [SerializeField] private ConfigService configService;
+
+    public override void InstallBindings(UDIContainer container)
+    {
+        container.Bind<ConfigService>()
+            .FromInstance(configService)
+            .AsSingle()
+            .RequiredForContextStart();
+    }
+}
+
+public sealed class ConfigService : IAsyncInitializable
+{
+    public Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
+    }
+}
+```
+
+#### UDI 全局注入使用方式
+
+- 在 `Resources` 目录下创建一个 `GlobalInstaller` 资源
+- 在 `GlobalInstaller` 中注册少量跨场景常驻服务，并使用 `.AsGlobal()`
+- 没有 `UDIContext` 的场景也可以直接注入这些全局服务
+- 如果某个场景根对象上挂了普通 `UDIContext`，则该本地上下文中的绑定优先于全局绑定
+
+#### UDI 异步初始化使用方式
+
+- 对于必须先加载完成的数据 / 服务，实现 `IAsyncInitializable`
+- 对应绑定增加 `.RequiredForContextStart()`
+- 在 `UDIContext` 上指定 `ManagedContentRoot`
+- `ManagedContentRoot` 会在 Required 异步服务初始化成功后才被注入并激活
+- 如果初始化失败，Context 会保持未就绪状态，`ManagedContentRoot` 也不会被激活
+
 ### UFind
 
 - `[Comp]` 绑定当前 GameObject 上的组件
@@ -151,7 +219,7 @@ public sealed class EnemySpawner : MonoBehaviour
 - `[Resource]` 自动从 `Resources` 加载资源
 - `UBehaviour` 会缓存反射信息，减少重复扫描
 
-#### UFind 示例：自动绑定组件、子节点和资源
+#### UFind 示例：自动绑定本地组件、子节点和资源
 
 ```csharp
 using TMPro;
@@ -182,19 +250,19 @@ public sealed class InventoryPanel : UBehaviour
 #### UFind 行为说明
 
 - `[Child]` 不传参数时，默认使用字段名查找
-- 字段类型如果是 `GameObject`，会直接赋值子节点对象本身
-- 字段类型如果是组件，会先找到子节点，再从该节点上取组件
-- 如果有多个同名子节点，建议改用路径写法
+- 如果字段类型是 `GameObject`，会直接赋值子节点对象本身
+- 如果字段类型是组件，会先找到子节点，再从该节点上获取组件
+- 如果有多个同名子节点，建议使用路径写法
 
 ### UMessage
 
 - 使用 `UMessageCenter.Instance`
 - 支持强类型 `Subscribe<T>()`、`Publish<T>()`、`Unsubscribe<T>()`
-- `Subscribe` 返回 `IMessageSubscription`，方便在 `OnDisable` 中释放
+- `Subscribe` 返回 `IMessageSubscription`，便于在 `OnDisable` 中释放
 - 默认支持“先发布、后订阅”的待处理消息回放
 - 会自动清理已经销毁的 `UnityEngine.Object` 订阅目标
 
-#### UMessage 示例：订阅、接收回放、释放订阅
+#### UMessage 示例：订阅、接收回放并释放订阅
 
 ```csharp
 using UnityEngine;
@@ -247,7 +315,7 @@ IMessageSubscription subscription = UMessageCenter.Instance.Subscribe<ScoreChang
 
 ### UUtils
 
-`UUtils` 包含很多扩展与工具方法，常用类别包括：
+`UUtils` 包含大量扩展与工具方法，常见类别包括：
 
 - 字符串辅助：`IsNullOrEmpty()`、`CheckUserName()`、`TrimLength()`
 - 时间辅助：`ToTimeString()`、`Tohhmmss()`
@@ -279,7 +347,7 @@ public sealed class UtilityExample : MonoBehaviour
 }
 ```
 
-#### UUtils 示例：GameObject 与 UI 操作
+#### UUtils 示例：GameObject 与 UI 辅助
 
 ```csharp
 using UnityEngine;
