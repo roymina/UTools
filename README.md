@@ -212,6 +212,7 @@ public sealed class ConfigService : IAsyncInitializable
 #### UFind Example: auto-bind local components, children, and resources
 
 ```csharp
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -246,9 +247,12 @@ public sealed class InventoryPanel : UBehaviour
 - If the field type is `GameObject`, the child object itself is assigned.
 - If the field type is a component, UTools finds the child first, then gets the component from that child.
 - If `[Children]` has no `parentName`, the field name is used to locate the parent object first.
+- Example: `[Children] private List<GameObject> SlotGrid;` means "find a parent GameObject named `SlotGrid`, then collect its children".
+- Example: `[Children("SlotGrid")] private List<Button> ChildButtons;` collects `Button` components from the children under `SlotGrid`.
 - `[Children]` only supports `List<GameObject>` and `List<TComponent>`.
 - `[Children]` defaults to first-level children only and includes inactive children.
 - If `[Children]` targets components, UTools checks each collected child and keeps only the ones that contain that component.
+- Errors are reported per field. One `[Children]` field can log a missing-parent error while another `[Children("...")]` field on the same behaviour still binds successfully.
 - If multiple children share the same name, use a path instead of a simple name.
 
 ### UMessage

@@ -99,9 +99,12 @@ public sealed class LobbyPanel : UBehaviour
 ```
 
 - If `[Children]` has no `parentName`, the field name is used to find the parent object.
+- Example: `[Children] public List<GameObject> SlotGroup;` looks for a parent object named `SlotGroup`, then returns its children.
+- Example: `[Children("SlotGrid")] public List<Button> SlotButtons;` looks for the parent object `SlotGrid`, then collects `Button` components from its children.
 - `[Children]` defaults to first-level children only (`includeDecendents = false`).
 - `[Children]` includes inactive children by default (`includeInactive = true`).
 - Component lists only keep children that actually contain the requested component.
+- Errors are emitted per field, so one missing parent lookup does not stop another `[Children]` field from binding successfully.
 
 ## Testing
 
