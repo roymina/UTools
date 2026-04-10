@@ -182,6 +182,7 @@ MonoBehaviour:
   - {fileID: 644328136}
   _scriptableObjectInstallers:
   - {fileID: 11400000, guid: cb5ebed2a933057439ca76f52474c8ee, type: 2}
+  _asyncWaitRoot: {fileID: 1054721926}
 --- !u!1 &897626084
 GameObject:
   m_ObjectHideFlags: 0

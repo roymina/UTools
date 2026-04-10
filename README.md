@@ -46,7 +46,7 @@ Notes:
 - A scene-level local container requires exactly one explicit `UDIContext` in the scene.
 - Keep `UDIContext` and `MonoInstaller` on a dedicated bootstrap object; consumers can live anywhere else in the scene.
 - If a scene contains multiple `UDIContext` components, initialization fails with an error instead of partially injecting objects.
-- `ManagedContentRoot` still works, and required async services now also suspend other scene roots until injection is ready.
+- Use `AsyncWaitRoot` when only one subtree should wait for required async services; objects outside that subtree keep running immediately.
 
 #### UDI Example: register services and start a scene context
 

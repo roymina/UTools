@@ -45,10 +45,11 @@ public sealed class GameGlobalInstaller : GlobalInstaller
 - Services that must finish loading before a context starts can implement `IAsyncInitializable`.
 - Mark those bindings with `.RequiredForContextStart()`.
 - Keep `UDIContext` and installers on a dedicated bootstrap object.
-- When a scene uses a single `UDIContext`, other active scene roots are suspended until required async services are ready.
-- Put camera, lighting, loading UI, and installers under the bootstrap root if they must remain active during async startup.
-- Put gameplay/content in separate scene roots when they should stay suspended until startup completes.
-- If async initialization fails, the context stays not-ready and suspended scene roots are not restored.
+- Assign `AsyncWaitRoot` when required async services should delay only one subtree.
+- `AsyncWaitRoot` and its descendants are injected only after required async services finish initializing.
+- Objects outside `AsyncWaitRoot` are injected immediately and keep running; they must not assume async-ready services are fully initialized.
+- If required async bindings exist and `AsyncWaitRoot` is not assigned, the context fails initialization with an error.
+- If async initialization fails, the context stays not-ready and `AsyncWaitRoot` is not reactivated.
 
 ```csharp
 using System.Threading;

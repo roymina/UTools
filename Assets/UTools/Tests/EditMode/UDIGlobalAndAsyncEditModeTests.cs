@@ -10,8 +10,10 @@ namespace UTools.Tests
     public class UDIGlobalAndAsyncEditModeTests
     {
         [Test]
-        public void UDIContext_DoesNotExposeManagedContentRootApi()
+        public void UDIContext_ExposesAsyncWaitRootApi_AndDoesNotExposeManagedContentRootApi()
         {
+            Assert.That(typeof(UDIContext).GetField("_asyncWaitRoot", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic), Is.Not.Null);
+            Assert.That(typeof(UDIContext).GetProperty("AsyncWaitRoot"), Is.Not.Null);
             Assert.That(typeof(UDIContext).GetField("_managedContentRoot", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic), Is.Null);
             Assert.That(typeof(UDIContext).GetProperty("ManagedContentRoot"), Is.Null);
         }

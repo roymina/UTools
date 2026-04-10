@@ -1,59 +1,59 @@
-#  如何使用Installers
+﻿#  濡備綍浣跨敤Installers
 
-- `GlobalInstaller`：给**整个游戏**准备“全局兜底服务”
-- `MonoInstaller`：给**当前场景**准备“场景专属服务”
-- `ScriptableObjectInstaller`：给**当前场景**准备“可复用的资产型配置/服务”
-- `ManagedContentRoot`：等依赖都准备好后，再把**真正内容树**打开
+- `GlobalInstaller`锛氱粰**鏁翠釜娓告垙**鍑嗗鈥滃叏灞€鍏滃簳鏈嶅姟鈥?
+- `MonoInstaller`锛氱粰**褰撳墠鍦烘櫙**鍑嗗鈥滃満鏅笓灞炴湇鍔♀€?
+- `ScriptableObjectInstaller`锛氱粰**褰撳墠鍦烘櫙**鍑嗗鈥滃彲澶嶇敤鐨勮祫浜у瀷閰嶇疆/鏈嶅姟鈥?
+- `AsyncWaitRoot`锛氱瓑渚濊禆閮藉噯澶囧ソ鍚庯紝鍐嶆妸**鐪熸鍐呭鏍?*鎵撳紑
 
-**关系图**
+**鍏崇郴鍥?*
 
 ```mermaid
 flowchart TD
-    GI["GlobalInstaller Asset<br/>放在 Resources 下<br/>全项目通常只有一个"] --> GC["Global Container<br/>全局容器"]
+    GI["GlobalInstaller Asset<br/>鏀惧湪 Resources 涓?br/>鍏ㄩ」鐩€氬父鍙湁涓€涓?] --> GC["Global Container<br/>鍏ㄥ眬瀹瑰櫒"]
 
-    Scene["Scene"] --> Boot["BootstrapRoot<br/>挂 UDIContext"]
-    Boot --> MI["MonoInstallers<br/>Inspector 上面的 Installers"]
-    Boot --> SOI["ScriptableObjectInstallers<br/>Inspector 上的资产列表"]
-    Boot --> MCR["ManagedContentRoot<br/>真正的 UI / Gameplay 根"]
+    Scene["Scene"] --> Boot["BootstrapRoot<br/>鎸?UDIContext"]
+    Boot --> MI["MonoInstallers<br/>Inspector 涓婇潰鐨?Installers"]
+    Boot --> SOI["ScriptableObjectInstallers<br/>Inspector 涓婄殑璧勪骇鍒楄〃"]
+    Boot --> MCR["AsyncWaitRoot<br/>鐪熸鐨?UI / Gameplay 鏍?]
 
-    MI --> LC["Local Container<br/>当前场景容器"]
+    MI --> LC["Local Container<br/>褰撳墠鍦烘櫙瀹瑰櫒"]
     SOI --> LC
-    GC -->|"父容器 / fallback"| LC
+    GC -->|"鐖跺鍣?/ fallback"| LC
 
-    LC -->|"Inject"| SceneObjs["场景对象"]
-    LC -->|"Inject"| Spawned["动态生成 Prefab"]
-    LC -->|"Ready 后激活"| MCR
+    LC -->|"Inject"| SceneObjs["鍦烘櫙瀵硅薄"]
+    LC -->|"Inject"| Spawned["鍔ㄦ€佺敓鎴?Prefab"]
+    LC -->|"Ready 鍚庢縺娲?| MCR
 ```
 
-**启动时序**
+**鍚姩鏃跺簭**
 ```mermaid
 sequenceDiagram
     participant Scene as Scene
     participant Ctx as UDIContext
     participant Global as Global Container
     participant Local as Local Container
-    participant Content as ManagedContentRoot
+    participant Content as AsyncWaitRoot
 
     Scene->>Ctx: Awake()
-    Ctx->>Global: 解析父容器（可选）
-    Ctx->>Local: 执行 ScriptableObjectInstallers
-    Ctx->>Local: 执行 MonoInstallers
+    Ctx->>Global: 瑙ｆ瀽鐖跺鍣紙鍙€夛級
+    Ctx->>Local: 鎵ц ScriptableObjectInstallers
+    Ctx->>Local: 鎵ц MonoInstallers
     Ctx->>Local: FinalizeBindings()
 
-    opt 有 RequiredForContextStart 异步服务
+    opt 鏈?RequiredForContextStart 寮傛鏈嶅姟
         Ctx->>Content: SetActive(false)
-        Ctx->>Local: 等待异步初始化完成
+        Ctx->>Local: 绛夊緟寮傛鍒濆鍖栧畬鎴?
     end
 
-    Ctx->>Local: 注入场景对象
+    Ctx->>Local: 娉ㄥ叆鍦烘櫙瀵硅薄
     Ctx->>Content: SetActive(true)
 ```
 
-**每一种怎么用**
+**姣忎竴绉嶆€庝箞鐢?*
 
 - **`MonoInstaller`**
-  - 适合：当前场景专用、需要拖场景对象引用
-  - 例子：主摄像机、当前场景 UI Root、Boss 出生点、关卡配置引用
+  - 閫傚悎锛氬綋鍓嶅満鏅笓鐢ㄣ€侀渶瑕佹嫋鍦烘櫙瀵硅薄寮曠敤
+  - 渚嬪瓙锛氫富鎽勫儚鏈恒€佸綋鍓嶅満鏅?UI Root銆丅oss 鍑虹敓鐐广€佸叧鍗￠厤缃紩鐢?
 ```csharp
 public class BattleSceneInstaller : MonoInstaller
 {
@@ -76,11 +76,11 @@ public class BattleSceneInstaller : MonoInstaller
     }
 }
 ```
-  - 用法：把这个组件挂到带 `UDIContext` 的 `BootstrapRoot` 上，然后拖到上面的 `Installers` 槽，或者直接和 `UDIContext` 挂同一个物体
+  - 鐢ㄦ硶锛氭妸杩欎釜缁勪欢鎸傚埌甯?`UDIContext` 鐨?`BootstrapRoot` 涓婏紝鐒跺悗鎷栧埌涓婇潰鐨?`Installers` 妲斤紝鎴栬€呯洿鎺ュ拰 `UDIContext` 鎸傚悓涓€涓墿浣?
 
 - **`ScriptableObjectInstaller`**
-  - 适合：可复用、数据驱动、不依赖场景对象
-  - 例子：武器平衡表、音频配置、掉落规则、数值表
+  - 閫傚悎锛氬彲澶嶇敤銆佹暟鎹┍鍔ㄣ€佷笉渚濊禆鍦烘櫙瀵硅薄
+  - 渚嬪瓙锛氭鍣ㄥ钩琛¤〃銆侀煶棰戦厤缃€佹帀钀借鍒欍€佹暟鍊艰〃
 ```csharp
 [CreateAssetMenu(menuName = "Game/Combat Installer")]
 public class CombatInstallerAsset : ScriptableObjectInstaller
@@ -100,14 +100,14 @@ public class CombatInstallerAsset : ScriptableObjectInstaller
     }
 }
 ```
-  - 用法：
-    1. 在 Project 里创建这个 asset  
-    2. 把 asset 拖到 `UDIContext > Scriptable Object Installers`
-  - 理解重点：它还是**本地场景容器**的一部分，不是全局容器
+  - 鐢ㄦ硶锛?
+    1. 鍦?Project 閲屽垱寤鸿繖涓?asset  
+    2. 鎶?asset 鎷栧埌 `UDIContext > Scriptable Object Installers`
+  - 鐞嗚В閲嶇偣锛氬畠杩樻槸**鏈湴鍦烘櫙瀹瑰櫒**鐨勪竴閮ㄥ垎锛屼笉鏄叏灞€瀹瑰櫒
 
 - **`GlobalInstaller`**
-  - 适合：跨场景通用、全局兜底服务
-  - 例子：存档、时钟、日志、账号、平台服务
+  - 閫傚悎锛氳法鍦烘櫙閫氱敤銆佸叏灞€鍏滃簳鏈嶅姟
+  - 渚嬪瓙锛氬瓨妗ｃ€佹椂閽熴€佹棩蹇椼€佽处鍙枫€佸钩鍙版湇鍔?
 ```csharp
 [CreateAssetMenu(menuName = "UTools/Global Installer")]
 public class GameGlobalInstaller : GlobalInstaller
@@ -126,17 +126,17 @@ public class GameGlobalInstaller : GlobalInstaller
     }
 }
 ```
-  - 用法：
-    1. 创建一个 `GlobalInstaller` 资产
-    2. 放到任意 `Resources` 目录下
-    3. 运行时自动加载
-  - 注意：
-    - 通常只保留一个
-    - 本地 scene 里如果又绑定了同类型服务，**本地优先，全局兜底**
+  - 鐢ㄦ硶锛?
+    1. 鍒涘缓涓€涓?`GlobalInstaller` 璧勪骇
+    2. 鏀惧埌浠绘剰 `Resources` 鐩綍涓?
+    3. 杩愯鏃惰嚜鍔ㄥ姞杞?
+  - 娉ㄦ剰锛?
+    - 閫氬父鍙繚鐣欎竴涓?
+    - 鏈湴 scene 閲屽鏋滃張缁戝畾浜嗗悓绫诲瀷鏈嶅姟锛?*鏈湴浼樺厛锛屽叏灞€鍏滃簳**
 
-- **`ManagedContentRoot`**
-  - 适合：场景启动前要等异步依赖准备好的情况
-  - 例子：先加载远程配置、存档、热更新表，再打开主 UI 或玩法树
+- **`AsyncWaitRoot`**
+  - 閫傚悎锛氬満鏅惎鍔ㄥ墠瑕佺瓑寮傛渚濊禆鍑嗗濂界殑鎯呭喌
+  - 渚嬪瓙锛氬厛鍔犺浇杩滅▼閰嶇疆銆佸瓨妗ｃ€佺儹鏇存柊琛紝鍐嶆墦寮€涓?UI 鎴栫帺娉曟爲
 ```csharp
 public class RemoteConfigInstaller : MonoInstaller
 {
@@ -151,75 +151,75 @@ public class RemoteConfigInstaller : MonoInstaller
     }
 }
 ```
-  - 场景结构示意：
+  - 鍦烘櫙缁撴瀯绀烘剰锛?
 ```text
 BootstrapRoot
-├── UDIContext
-├── BattleSceneInstaller
-└── GameplayRoot   <-- 拖到 ManagedContentRoot
+鈹溾攢鈹€ UDIContext
+鈹溾攢鈹€ BattleSceneInstaller
+鈹斺攢鈹€ GameplayRoot   <-- 鎷栧埌 AsyncWaitRoot
 ```
-  - 效果：
-    - `GameplayRoot` 会先保持关闭
-    - `RemoteConfigService.InitializeAsync()` 完成后才打开
-    - 这样 `GameplayRoot` 下面的 UI / 玩家 / 关卡逻辑不会过早 `Awake`
+  - 鏁堟灉锛?
+    - `GameplayRoot` 浼氬厛淇濇寔鍏抽棴
+    - `RemoteConfigService.InitializeAsync()` 瀹屾垚鍚庢墠鎵撳紑
+    - 杩欐牱 `GameplayRoot` 涓嬮潰鐨?UI / 鐜╁ / 鍏冲崱閫昏緫涓嶄細杩囨棭 `Awake`
 
-**最推荐的搭法**
-- **小项目 / 单场景原型**
-  - 只用 `UDIContext + MonoInstaller`
-- **中型项目 / 多场景**
-  - `GlobalInstaller` 放跨场景服务
-  - 每个 scene 一个 `UDIContext`
-  - scene 专属内容放 `MonoInstaller`
-  - 可复用配置放 `ScriptableObjectInstaller`
-- **有异步启动流程**
-  - 再加 `ManagedContentRoot`
+**鏈€鎺ㄨ崘鐨勬惌娉?*
+- **灏忛」鐩?/ 鍗曞満鏅師鍨?*
+  - 鍙敤 `UDIContext + MonoInstaller`
+- **涓瀷椤圭洰 / 澶氬満鏅?*
+  - `GlobalInstaller` 鏀捐法鍦烘櫙鏈嶅姟
+  - 姣忎釜 scene 涓€涓?`UDIContext`
+  - scene 涓撳睘鍐呭鏀?`MonoInstaller`
+  - 鍙鐢ㄩ厤缃斁 `ScriptableObjectInstaller`
+- **鏈夊紓姝ュ惎鍔ㄦ祦绋?*
+  - 鍐嶅姞 `AsyncWaitRoot`
 
-**总结**
+**鎬荤粨**
 
-- 需要拖场景对象引用 → 用 `MonoInstaller`
-- 需要做成可复用 asset → 用 `ScriptableObjectInstaller`
-- 需要跨场景全局可用 → 用 `GlobalInstaller`
-- 需要“等初始化完再开场” → 用 `ManagedContentRoot`
+- 闇€瑕佹嫋鍦烘櫙瀵硅薄寮曠敤 鈫?鐢?`MonoInstaller`
+- 闇€瑕佸仛鎴愬彲澶嶇敤 asset 鈫?鐢?`ScriptableObjectInstaller`
+- 闇€瑕佽法鍦烘櫙鍏ㄥ眬鍙敤 鈫?鐢?`GlobalInstaller`
+- 闇€瑕佲€滅瓑鍒濆鍖栧畬鍐嶅紑鍦衡€?鈫?鐢?`AsyncWaitRoot`
 
-**对应项目实现**
-- `UDIContext` 初始化流程：`D:\Projects-Personal\UTools\Assets\UTools\Scripts\UDI\UDIContext.cs:63`
-- `ManagedContentRoot` 处理：`D:\Projects-Personal\UTools\Assets\UTools\Scripts\UDI\UDIContext.cs:284`
-- 全局 installer 自动加载：`D:\Projects-Personal\UTools\Assets\UTools\Scripts\UDI\UDIGlobalRuntime.cs:70`
-- 官方说明：`D:\Projects-Personal\UTools\Assets\UTools\Documentation~\README.md:12`
-- 你的本地 installer 示例：`D:\Projects-Personal\UTools\Assets\DevTest\UDI\GameInstaller.cs:6`
-- 你的全局 installer 示例：`D:\Projects-Personal\UTools\Assets\DevTest\UDI\GameGlobalInstaller.cs:7`
+**瀵瑰簲椤圭洰瀹炵幇**
+- `UDIContext` 鍒濆鍖栨祦绋嬶細`D:\Projects-Personal\UTools\Assets\UTools\Scripts\UDI\UDIContext.cs:63`
+- `AsyncWaitRoot` 澶勭悊锛歚D:\Projects-Personal\UTools\Assets\UTools\Scripts\UDI\UDIContext.cs:284`
+- 鍏ㄥ眬 installer 鑷姩鍔犺浇锛歚D:\Projects-Personal\UTools\Assets\UTools\Scripts\UDI\UDIGlobalRuntime.cs:70`
+- 瀹樻柟璇存槑锛歚D:\Projects-Personal\UTools\Assets\UTools\Documentation~\README.md:12`
+- 浣犵殑鏈湴 installer 绀轰緥锛歚D:\Projects-Personal\UTools\Assets\DevTest\UDI\GameInstaller.cs:6`
+- 浣犵殑鍏ㄥ眬 installer 绀轰緥锛歚D:\Projects-Personal\UTools\Assets\DevTest\UDI\GameGlobalInstaller.cs:7`
 
  
 
-# 推荐场景层级图
+# 鎺ㄨ崘鍦烘櫙灞傜骇鍥?
 
 ```mermaid
 flowchart TD
     subgraph App["Game App"]
-        GI["GlobalInstaller Asset<br/>放在 Resources 下<br/>注册全局服务"]
+        GI["GlobalInstaller Asset<br/>鏀惧湪 Resources 涓?br/>娉ㄥ唽鍏ㄥ眬鏈嶅姟"]
     end
 
-    GI --> GC["Global Container<br/>全局容器"]
+    GI --> GC["Global Container<br/>鍏ㄥ眬瀹瑰櫒"]
 
     subgraph Scene["BattleScene / MainScene"]
         Boot["BootstrapRoot"]
         Ctx["UDIContext"]
         MI["MonoInstaller<br/>BattleSceneInstaller"]
         SOI["ScriptableObjectInstaller Assets<br/>CombatInstallerAsset / UIConfigInstaller"]
-        MCR["ManagedContentRoot<br/>GameplayRoot"]
+        MCR["AsyncWaitRoot<br/>GameplayRoot"]
 
         Boot --> Ctx
         Boot --> MI
         Boot --> MCR
 
-        subgraph Managed["GameplayRoot（启动后才激活）"]
+        subgraph Managed["GameplayRoot锛堝惎鍔ㄥ悗鎵嶆縺娲伙級"]
             Player["PlayerRoot"]
             Enemies["EnemyRoot"]
             UI["UIRoot"]
             Spawner["SpawnerRoot"]
         end
 
-        subgraph Other["其他 Scene Root"]
+        subgraph Other["鍏朵粬 Scene Root"]
             Camera["CameraRoot"]
             Audio["AudioRoot"]
         end
@@ -230,10 +230,10 @@ flowchart TD
         MCR --> Spawner
     end
 
-    Ctx --> LC["Local Container<br/>当前场景容器"]
+    Ctx --> LC["Local Container<br/>褰撳墠鍦烘櫙瀹瑰櫒"]
     MI --> LC
     SOI --> LC
-    GC -->|"fallback / 父容器"| LC
+    GC -->|"fallback / 鐖跺鍣?| LC
 
     LC -->|"Inject"| Player
     LC -->|"Inject"| Enemies
@@ -243,39 +243,39 @@ flowchart TD
     LC -->|"Inject"| Audio
 ```
 
-**你可以这样理解**
+**浣犲彲浠ヨ繖鏍风悊瑙?*
 - `GlobalInstaller`
-  - 放“全游戏通用”的服务
-  - 例如：`SaveService`、`LogService`、`ClockService`
+  - 鏀锯€滃叏娓告垙閫氱敤鈥濈殑鏈嶅姟
+  - 渚嬪锛歚SaveService`銆乣LogService`銆乣ClockService`
 - `MonoInstaller`
-  - 放“这个场景特有”的服务
-  - 例如：`BattleUIRoot`、`SceneCamera`、`EnemySpawner`
+  - 鏀锯€滆繖涓満鏅壒鏈夆€濈殑鏈嶅姟
+  - 渚嬪锛歚BattleUIRoot`銆乣SceneCamera`銆乣EnemySpawner`
 - `ScriptableObjectInstaller`
-  - 放“可复用配置型”的服务或数据
-  - 例如：`WeaponBalanceTable`、`AudioConfig`、`DropRuleTable`
-- `ManagedContentRoot`
-  - 放“必须等依赖准备好后才能启动”的内容树
-  - 例如：`GameplayRoot`、`UIRoot`
+  - 鏀锯€滃彲澶嶇敤閰嶇疆鍨嬧€濈殑鏈嶅姟鎴栨暟鎹?
+  - 渚嬪锛歚WeaponBalanceTable`銆乣AudioConfig`銆乣DropRuleTable`
+- `AsyncWaitRoot`
+  - 鏀锯€滃繀椤荤瓑渚濊禆鍑嗗濂藉悗鎵嶈兘鍚姩鈥濈殑鍐呭鏍?
+  - 渚嬪锛歚GameplayRoot`銆乣UIRoot`
 
-**启动流程图**
+**鍚姩娴佺▼鍥?*
 ```mermaid
 flowchart TD
     A["Scene Start"] --> B["UDIContext Awake"]
-    B --> C["加载父容器 / Global Container"]
-    C --> D["执行 ScriptableObjectInstallers"]
-    D --> E["执行 MonoInstallers"]
-    E --> F{"有 RequiredForContextStart<br/>异步服务吗？"}
+    B --> C["鍔犺浇鐖跺鍣?/ Global Container"]
+    C --> D["鎵ц ScriptableObjectInstallers"]
+    D --> E["鎵ц MonoInstallers"]
+    E --> F{"鏈?RequiredForContextStart<br/>寮傛鏈嶅姟鍚楋紵"}
 
-    F -- 否 --> G["直接注入 Scene 对象"]
-    F -- 是 --> H["先关闭 ManagedContentRoot"]
-    H --> I["等待异步服务初始化完成"]
+    F -- 鍚?--> G["鐩存帴娉ㄥ叆 Scene 瀵硅薄"]
+    F -- 鏄?--> H["鍏堝叧闂?AsyncWaitRoot"]
+    H --> I["绛夊緟寮傛鏈嶅姟鍒濆鍖栧畬鎴?]
     I --> G
 
-    G --> J["激活 ManagedContentRoot"]
-    J --> K["场景进入可玩状态"]
+    G --> J["婵€娲?AsyncWaitRoot"]
+    J --> K["鍦烘櫙杩涘叆鍙帺鐘舵€?]
 ```
 
-**一个具体例子**
+**涓€涓叿浣撲緥瀛?*
 
 - **`GlobalInstaller`**
 ```csharp
@@ -322,7 +322,7 @@ public class CombatInstallerAsset : ScriptableObjectInstaller
 }
 ```
 
-- **`ManagedContentRoot` 对应的异步初始化**
+- **`AsyncWaitRoot` 瀵瑰簲鐨勫紓姝ュ垵濮嬪寲**
 ```csharp
 public class RemoteConfigInstaller : MonoInstaller
 {
@@ -338,32 +338,33 @@ public class RemoteConfigInstaller : MonoInstaller
 }
 ```
 
-**Inspector 里怎么拖**
+**Inspector 閲屾€庝箞鎷?*
 - `Installers`
-  - 拖 `BattleSceneInstaller` 这种挂在场景物体上的组件
+  - 鎷?`BattleSceneInstaller` 杩欑鎸傚湪鍦烘櫙鐗╀綋涓婄殑缁勪欢
 - `Scriptable Object Installers`
-  - 拖 `CombatInstallerAsset` 这种 Project 面板里的 asset
+  - 鎷?`CombatInstallerAsset` 杩欑 Project 闈㈡澘閲岀殑 asset
 - `Managed Content Root`
-  - 拖 `GameplayRoot` 这个场景里的根节点
+  - 鎷?`GameplayRoot` 杩欎釜鍦烘櫙閲岀殑鏍硅妭鐐?
 
-**最小推荐结构**
+**鏈€灏忔帹鑽愮粨鏋?*
 ```text
 BootstrapRoot
-├── UDIContext
-├── BattleSceneInstaller
-└── GameplayRoot   <- 拖到 ManagedContentRoot
-    ├── PlayerRoot
-    ├── EnemyRoot
-    ├── UIRoot
-    └── SpawnerRoot
+鈹溾攢鈹€ UDIContext
+鈹溾攢鈹€ BattleSceneInstaller
+鈹斺攢鈹€ GameplayRoot   <- 鎷栧埌 AsyncWaitRoot
+    鈹溾攢鈹€ PlayerRoot
+    鈹溾攢鈹€ EnemyRoot
+    鈹溾攢鈹€ UIRoot
+    鈹斺攢鈹€ SpawnerRoot
 ```
 
-**什么时候不要复杂化**
-- 只是小 demo：
-  - 只用 `UDIContext + MonoInstaller`
-- 做到多个场景、配置越来越多时：
-  - 再加 `ScriptableObjectInstaller`
-- 确实需要跨场景共享：
-  - 再加 `GlobalInstaller`
-- 确实有异步准备阶段：
-  - 再用 `ManagedContentRoot`
+**浠€涔堟椂鍊欎笉瑕佸鏉傚寲**
+- 鍙槸灏?demo锛?
+  - 鍙敤 `UDIContext + MonoInstaller`
+- 鍋氬埌澶氫釜鍦烘櫙銆侀厤缃秺鏉ヨ秺澶氭椂锛?
+  - 鍐嶅姞 `ScriptableObjectInstaller`
+- 纭疄闇€瑕佽法鍦烘櫙鍏变韩锛?
+  - 鍐嶅姞 `GlobalInstaller`
+- 纭疄鏈夊紓姝ュ噯澶囬樁娈碉細
+  - 鍐嶇敤 `AsyncWaitRoot`
+

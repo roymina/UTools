@@ -59,7 +59,7 @@ namespace UTools.Tests
         }
 
         [UnityTest]
-        public IEnumerator SceneContext_WithRequiredAsyncServices_FreezesSiblingRootsUntilReady()
+        public IEnumerator SceneContext_WithRequiredAsyncServices_WaitsOnlyAsyncWaitRootSubtree()
         {
             GameObject bootstrap = new("Bootstrap");
             bootstrap.SetActive(false);
@@ -73,35 +73,82 @@ namespace UTools.Tests
             bootstrapChild.transform.SetParent(bootstrap.transform);
             ActivationProbe bootstrapProbe = bootstrapChild.AddComponent<ActivationProbe>();
 
+            GameObject asyncWaitRoot = new("AsyncWaitRoot");
+            asyncWaitRoot.transform.SetParent(bootstrap.transform);
+            AsyncConsumer waitingConsumer = asyncWaitRoot.AddComponent<AsyncConsumer>();
+
+            SetAsyncWaitRoot(context, asyncWaitRoot);
+
             GameObject sibling = new("Sibling");
-            sibling.SetActive(true);
+            sibling.SetActive(false);
+            AsyncConsumer siblingConsumer = sibling.AddComponent<AsyncConsumer>();
 
             bootstrap.SetActive(true);
+            sibling.SetActive(true);
             yield return null;
 
             Assert.That(context.IsReady, Is.False);
             Assert.That(bootstrap.activeSelf, Is.True);
             Assert.That(bootstrapChild.activeInHierarchy, Is.True);
             Assert.That(bootstrapProbe.AwakeCount, Is.EqualTo(1));
-            Assert.That(sibling.activeSelf, Is.False);
-
-            AsyncConsumer consumer = sibling.AddComponent<AsyncConsumer>();
-            Assert.That(consumer.AwakeCount, Is.EqualTo(0));
+            Assert.That(asyncWaitRoot.activeSelf, Is.False);
+            Assert.That(waitingConsumer.AwakeCount, Is.EqualTo(0));
+            Assert.That(sibling.activeSelf, Is.True);
+            Assert.That(siblingConsumer.Service, Is.Not.Null);
+            Assert.That(siblingConsumer.AwakenedWithService, Is.True);
 
             gateService.Complete();
             yield return new WaitUntil(() => context.IsReady);
             yield return null;
 
+            Assert.That(asyncWaitRoot.activeSelf, Is.True);
+            Assert.That(waitingConsumer.Service, Is.Not.Null);
+            Assert.That(waitingConsumer.AwakenedWithService, Is.True);
             Assert.That(sibling.activeSelf, Is.True);
-            Assert.That(consumer.Service, Is.Not.Null);
-            Assert.That(consumer.AwakenedWithService, Is.True);
+            Assert.That(siblingConsumer.Service, Is.Not.Null);
 
             Object.Destroy(sibling);
             Object.Destroy(bootstrap);
         }
 
         [UnityTest]
-        public IEnumerator SceneContext_WithoutRequiredAsyncServices_DoesNotFreezeSiblingRoots()
+        public IEnumerator SceneContext_WithRequiredAsyncServices_AndInactiveAsyncWaitRoot_KeepsItInactiveAfterReady()
+        {
+            GameObject bootstrap = new("Bootstrap");
+            bootstrap.SetActive(false);
+
+            UDIContext context = bootstrap.AddComponent<UDIContext>();
+            AsyncInstaller installer = bootstrap.AddComponent<AsyncInstaller>();
+            AsyncGateService gateService = new();
+            installer.Service = gateService;
+
+            GameObject asyncWaitRoot = new("AsyncWaitRoot");
+            asyncWaitRoot.transform.SetParent(bootstrap.transform);
+            asyncWaitRoot.SetActive(false);
+            AsyncConsumer waitingConsumer = asyncWaitRoot.AddComponent<AsyncConsumer>();
+
+            SetAsyncWaitRoot(context, asyncWaitRoot);
+
+            bootstrap.SetActive(true);
+            yield return null;
+
+            Assert.That(context.IsReady, Is.False);
+            Assert.That(asyncWaitRoot.activeSelf, Is.False);
+            Assert.That(waitingConsumer.AwakeCount, Is.EqualTo(0));
+
+            gateService.Complete();
+            yield return new WaitUntil(() => context.IsReady);
+            yield return null;
+
+            Assert.That(asyncWaitRoot.activeSelf, Is.False);
+            Assert.That(waitingConsumer.Service, Is.Not.Null);
+            Assert.That(waitingConsumer.AwakeCount, Is.EqualTo(0));
+
+            Object.Destroy(bootstrap);
+        }
+
+        [UnityTest]
+        public IEnumerator SceneContext_WithoutRequiredAsyncServices_DoesNotDelayAsyncWaitRoot()
         {
             GameObject bootstrap = new("Bootstrap");
             bootstrap.SetActive(false);
@@ -110,22 +157,84 @@ namespace UTools.Tests
             MarkerInstaller installer = bootstrap.AddComponent<MarkerInstaller>();
             installer.Service = new MarkerService("local");
 
-            GameObject sibling = new("Sibling");
-            sibling.SetActive(false);
-            MarkerConsumer consumer = sibling.AddComponent<MarkerConsumer>();
+            GameObject asyncWaitRoot = new("AsyncWaitRoot");
+            asyncWaitRoot.transform.SetParent(bootstrap.transform);
+            MarkerConsumer consumer = asyncWaitRoot.AddComponent<MarkerConsumer>();
+
+            SetAsyncWaitRoot(context, asyncWaitRoot);
 
             bootstrap.SetActive(true);
-            sibling.SetActive(true);
             yield return null;
             yield return new WaitUntil(() => context.IsReady);
             yield return null;
 
             Assert.That(bootstrap.activeSelf, Is.True);
-            Assert.That(sibling.activeSelf, Is.True);
+            Assert.That(asyncWaitRoot.activeSelf, Is.True);
             Assert.That(consumer.Service, Is.Not.Null);
             Assert.That(consumer.AwakenedWithService, Is.True);
 
-            Object.Destroy(sibling);
+            Object.Destroy(bootstrap);
+        }
+
+        [UnityTest]
+        public IEnumerator SceneContext_WithRequiredAsyncServices_AndMissingAsyncWaitRoot_LogsErrorAndDoesNotInitialize()
+        {
+            GameObject bootstrap = new("Bootstrap");
+            bootstrap.SetActive(false);
+
+            UDIContext context = bootstrap.AddComponent<UDIContext>();
+            AsyncInstaller installer = bootstrap.AddComponent<AsyncInstaller>();
+            installer.Service = new AsyncGateService();
+
+            LogAssert.Expect(LogType.Error, new Regex("AsyncWaitRoot", RegexOptions.IgnoreCase));
+
+            bootstrap.SetActive(true);
+            yield return null;
+
+            Assert.That(context.IsReady, Is.False);
+            Assert.That(context.InitializationException, Is.Not.Null);
+
+            Object.Destroy(bootstrap);
+        }
+
+        [UnityTest]
+        public IEnumerator SceneContext_WithExternalInstaller_LogsWarningAndContinues()
+        {
+            GameObject bootstrap = new("Bootstrap");
+            bootstrap.SetActive(false);
+
+            UDIContext context = bootstrap.AddComponent<UDIContext>();
+            AsyncInstaller installer = bootstrap.AddComponent<AsyncInstaller>();
+            AsyncGateService gateService = new();
+            installer.Service = gateService;
+
+            GameObject asyncWaitRoot = new("AsyncWaitRoot");
+            asyncWaitRoot.transform.SetParent(bootstrap.transform);
+            AsyncConsumer waitingConsumer = asyncWaitRoot.AddComponent<AsyncConsumer>();
+            SetAsyncWaitRoot(context, asyncWaitRoot);
+
+            GameObject externalInstallerRoot = new("ExternalInstallerRoot");
+            externalInstallerRoot.SetActive(false);
+            WarningInstaller externalInstaller = externalInstallerRoot.AddComponent<WarningInstaller>();
+            externalInstaller.Service = new MarkerService("warn");
+
+            LogAssert.Expect(LogType.Warning, new Regex("AsyncWaitRoot", RegexOptions.IgnoreCase));
+
+            bootstrap.SetActive(true);
+            externalInstallerRoot.SetActive(true);
+            yield return null;
+
+            Assert.That(context.IsReady, Is.False);
+            Assert.That(externalInstaller.GetComponent<UDIContext>(), Is.Null);
+            Assert.That(waitingConsumer.AwakeCount, Is.EqualTo(0));
+
+            gateService.Complete();
+            yield return new WaitUntil(() => context.IsReady);
+            yield return null;
+
+            Assert.That(waitingConsumer.Service, Is.Not.Null);
+
+            Object.Destroy(externalInstallerRoot);
             Object.Destroy(bootstrap);
         }
 
@@ -251,6 +360,13 @@ namespace UTools.Tests
                 ?.SetValue(null, null);
         }
 
+        private static void SetAsyncWaitRoot(UDIContext context, GameObject asyncWaitRoot)
+        {
+            FieldInfo field = typeof(UDIContext).GetField("_asyncWaitRoot", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, "UDIContext is expected to expose a serialized _asyncWaitRoot field.");
+            field.SetValue(context, asyncWaitRoot);
+        }
+
         private static void InvokeGlobalSceneInjection(UnityEngine.SceneManagement.Scene scene)
         {
             System.Type runtimeType = typeof(UDIContext).Assembly.GetType("UTools.UDIGlobalRuntime");
@@ -350,6 +466,18 @@ namespace UTools.Tests
         }
 
         private sealed class MarkerInstaller : MonoInstaller
+        {
+            public MarkerService Service { get; set; }
+
+            public override void InstallBindings(UDIContainer container)
+            {
+                container.Bind<MarkerService>()
+                    .FromInstance(Service)
+                    .AsSingle();
+            }
+        }
+
+        private sealed class WarningInstaller : MonoInstaller
         {
             public MarkerService Service { get; set; }
 

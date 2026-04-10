@@ -15,6 +15,8 @@ namespace UTools
         private List<MonoInstaller> _installers = new();
         [SerializeField]
         private List<ScriptableObjectInstaller> _scriptableObjectInstallers = new();
+        [SerializeField]
+        private GameObject _asyncWaitRoot;
 
         private UDIContainer _container;
         private LifecycleManager _lifecycleManager;
@@ -24,13 +26,14 @@ namespace UTools
         private Task _readyTask;
         private bool _injectWholeScene;
         private GameObject _bootstrapRoot;
-        private readonly List<GameObject> _suspendedSceneRoots = new();
+        private bool _asyncWaitRootWasActive;
 
         public UDIContainer Container => _container;
         public LifecycleManager LifecycleManager => _lifecycleManager;
         public bool IsReady { get; private set; }
         public Task ReadyTask => _readyTask ?? Task.CompletedTask;
         public Exception InitializationException { get; private set; }
+        public GameObject AsyncWaitRoot => _asyncWaitRoot;
 
         protected virtual void Awake()
         {
@@ -118,12 +121,22 @@ namespace UTools
 
                 InstallBindings();
                 _container.FinalizeBindings();
-                SuspendSceneRootsUntilReadyIfNeeded();
-                await _container.InitializeRequiredForContextStartAsync(_initializationCancellation.Token);
-
-                InjectContextObjects();
-                _lifecycleManager.Initialize();
-                RestoreSuspendedSceneRoots();
+                if (_container.HasRequiredForContextStartBindings)
+                {
+                    ValidateAsyncWaitRoot();
+                    WarnAboutAsyncWaitRootInstallerUsage();
+                    PrepareAsyncWaitRoot();
+                    InjectSceneObjectsExcludingAsyncWaitRoot();
+                    _lifecycleManager.Initialize();
+                    await _container.InitializeRequiredForContextStartAsync(_initializationCancellation.Token);
+                    InjectAsyncWaitRoot();
+                    RestoreAsyncWaitRoot();
+                }
+                else
+                {
+                    InjectContextObjects();
+                    _lifecycleManager.Initialize();
+                }
                 IsReady = true;
 
                 if (parentContainer == null && !UDIGlobalRuntime.HasGlobalContainer)
@@ -187,6 +200,20 @@ namespace UTools
             _container.InjectGameObject(gameObject);
         }
 
+        private void InjectSceneObjectsExcludingAsyncWaitRoot()
+        {
+            if (!_injectWholeScene || _asyncWaitRoot == null)
+            {
+                InjectContextObjects();
+                return;
+            }
+
+            foreach (GameObject rootGameObject in gameObject.scene.GetRootGameObjects())
+            {
+                InjectGameObjectExcludingSubtree(rootGameObject, _asyncWaitRoot.transform);
+            }
+        }
+
         private void ConfigureSceneOwnership()
         {
             UDIContext sceneContext = FindUniqueSceneContext(gameObject.scene, out string error);
@@ -209,6 +236,24 @@ namespace UTools
             _bootstrapRoot = transform.root != null ? transform.root.gameObject : gameObject;
         }
 
+        private void ValidateAsyncWaitRoot()
+        {
+            if (_asyncWaitRoot == null)
+            {
+                throw new InvalidOperationException($"UDIContext '{name}' requires AsyncWaitRoot when RequiredForContextStart bindings exist.");
+            }
+
+            if (_asyncWaitRoot.scene != gameObject.scene)
+            {
+                throw new InvalidOperationException($"UDIContext '{name}' has an AsyncWaitRoot '{_asyncWaitRoot.name}' from another scene.");
+            }
+
+            if (transform == _asyncWaitRoot.transform || transform.IsChildOf(_asyncWaitRoot.transform))
+            {
+                throw new InvalidOperationException($"UDIContext '{name}' cannot use AsyncWaitRoot '{_asyncWaitRoot.name}' because it contains the UDIContext object.");
+            }
+        }
+
         private UDIContext GetParentContext()
         {
             Transform parent = transform.parent;
@@ -226,36 +271,96 @@ namespace UTools
             return null;
         }
 
-        private void SuspendSceneRootsUntilReadyIfNeeded()
+        private void PrepareAsyncWaitRoot()
         {
-            if (!_injectWholeScene || !_container.HasRequiredForContextStartBindings)
+            if (_asyncWaitRoot == null)
+            {
+                return;
+            }
+
+            _asyncWaitRootWasActive = _asyncWaitRoot.activeSelf;
+            if (_asyncWaitRootWasActive)
+            {
+                _asyncWaitRoot.SetActive(false);
+            }
+        }
+
+        private void RestoreAsyncWaitRoot()
+        {
+            if (_asyncWaitRoot == null)
+            {
+                return;
+            }
+
+            if (_asyncWaitRootWasActive)
+            {
+                _asyncWaitRoot.SetActive(true);
+            }
+        }
+
+        private void InjectAsyncWaitRoot()
+        {
+            if (_asyncWaitRoot == null)
+            {
+                return;
+            }
+
+            _container.InjectGameObject(_asyncWaitRoot);
+        }
+
+        private void InjectGameObjectExcludingSubtree(GameObject gameObjectToInject, Transform excludedSubtreeRoot)
+        {
+            if (gameObjectToInject == null)
+            {
+                return;
+            }
+
+            Transform currentTransform = gameObjectToInject.transform;
+            if (currentTransform == excludedSubtreeRoot || currentTransform.IsChildOf(excludedSubtreeRoot))
+            {
+                return;
+            }
+
+            _container.InjectDependencies(gameObjectToInject);
+
+            foreach (Transform child in currentTransform)
+            {
+                InjectGameObjectExcludingSubtree(child.gameObject, excludedSubtreeRoot);
+            }
+        }
+
+        private void WarnAboutAsyncWaitRootInstallerUsage()
+        {
+            if (_asyncWaitRoot == null)
             {
                 return;
             }
 
             foreach (GameObject rootGameObject in gameObject.scene.GetRootGameObjects())
             {
-                if (rootGameObject == null || rootGameObject == _bootstrapRoot || !rootGameObject.activeSelf)
+                foreach (MonoInstaller installer in rootGameObject.GetComponentsInChildren<MonoInstaller>(true))
                 {
-                    continue;
-                }
+                    if (installer == null || IsInstallerInsideAllowedAsyncStartupZones(installer.transform))
+                    {
+                        continue;
+                    }
 
-                _suspendedSceneRoots.Add(rootGameObject);
-                rootGameObject.SetActive(false);
+                    Debug.LogWarning($"MonoInstaller '{installer.name}' is outside both BootstrapRoot '{_bootstrapRoot.name}' and AsyncWaitRoot '{_asyncWaitRoot.name}'. It will not wait for required async services and must not assume async-ready state.", installer);
+                }
             }
         }
 
-        private void RestoreSuspendedSceneRoots()
+        private bool IsInstallerInsideAllowedAsyncStartupZones(Transform installerTransform)
         {
-            foreach (GameObject rootGameObject in _suspendedSceneRoots)
+            if (installerTransform == null)
             {
-                if (rootGameObject != null)
-                {
-                    rootGameObject.SetActive(true);
-                }
+                return true;
             }
 
-            _suspendedSceneRoots.Clear();
+            return installerTransform == _bootstrapRoot.transform
+                || installerTransform.IsChildOf(_bootstrapRoot.transform)
+                || installerTransform == _asyncWaitRoot.transform
+                || installerTransform.IsChildOf(_asyncWaitRoot.transform);
         }
 
         private async Task<UDIContainer> ResolveParentContainerAsync()
@@ -289,6 +394,18 @@ namespace UTools
             }
 
             if (GetComponentInParent<UDIContext>() != null)
+            {
+                return;
+            }
+
+            UDIContext sceneContext = UDIContext.FindUniqueSceneContext(gameObject.scene, out string error);
+            if (sceneContext != null)
+            {
+                sceneContext.Initialize();
+                return;
+            }
+
+            if (error != null)
             {
                 return;
             }
