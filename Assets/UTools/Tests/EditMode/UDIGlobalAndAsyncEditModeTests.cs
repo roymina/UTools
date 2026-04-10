@@ -10,6 +10,13 @@ namespace UTools.Tests
     public class UDIGlobalAndAsyncEditModeTests
     {
         [Test]
+        public void UDIContext_DoesNotExposeManagedContentRootApi()
+        {
+            Assert.That(typeof(UDIContext).GetField("_managedContentRoot", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic), Is.Null);
+            Assert.That(typeof(UDIContext).GetProperty("ManagedContentRoot"), Is.Null);
+        }
+
+        [Test]
         public void AsGlobal_ThrowsWhenBindingIsNotFromGlobalContainer()
         {
             GameObject host = new("LocalHost");

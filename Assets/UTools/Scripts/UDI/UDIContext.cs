@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -14,8 +15,6 @@ namespace UTools
         private List<MonoInstaller> _installers = new();
         [SerializeField]
         private List<ScriptableObjectInstaller> _scriptableObjectInstallers = new();
-        [SerializeField]
-        private GameObject _managedContentRoot;
 
         private UDIContainer _container;
         private LifecycleManager _lifecycleManager;
@@ -23,13 +22,15 @@ namespace UTools
         private bool _isInitializing;
         private CancellationTokenSource _initializationCancellation;
         private Task _readyTask;
+        private bool _injectWholeScene;
+        private GameObject _bootstrapRoot;
+        private readonly List<GameObject> _suspendedSceneRoots = new();
 
         public UDIContainer Container => _container;
         public LifecycleManager LifecycleManager => _lifecycleManager;
         public bool IsReady { get; private set; }
         public Task ReadyTask => _readyTask ?? Task.CompletedTask;
         public Exception InitializationException { get; private set; }
-        public GameObject ManagedContentRoot => _managedContentRoot;
 
         protected virtual void Awake()
         {
@@ -99,10 +100,10 @@ namespace UTools
             InitializationException = null;
             _initializationCancellation = new CancellationTokenSource();
 
-            PrepareManagedContentRoot();
-
             try
             {
+                ConfigureSceneOwnership();
+
                 _lifecycleManager = GetComponent<LifecycleManager>();
                 if (_lifecycleManager == null)
                 {
@@ -117,11 +118,12 @@ namespace UTools
 
                 InstallBindings();
                 _container.FinalizeBindings();
+                SuspendSceneRootsUntilReadyIfNeeded();
                 await _container.InitializeRequiredForContextStartAsync(_initializationCancellation.Token);
 
-                InjectContextObjects(parentContainer == null && _managedContentRoot == null);
+                InjectContextObjects();
                 _lifecycleManager.Initialize();
-                ActivateManagedContentRoot();
+                RestoreSuspendedSceneRoots();
                 IsReady = true;
 
                 if (parentContainer == null && !UDIGlobalRuntime.HasGlobalContainer)
@@ -141,15 +143,38 @@ namespace UTools
             }
         }
 
-        private void InjectContextObjects(bool injectWholeScene)
+        internal static UDIContext FindUniqueSceneContext(Scene scene, out string error)
         {
-            if (_managedContentRoot != null)
+            error = null;
+            List<UDIContext> contexts = new();
+
+            foreach (GameObject rootGameObject in scene.GetRootGameObjects())
             {
-                _container.InjectGameObject(_managedContentRoot);
-                return;
+                contexts.AddRange(rootGameObject.GetComponentsInChildren<UDIContext>(true));
             }
 
-            if (injectWholeScene)
+            contexts = contexts
+                .Where(context => context != null)
+                .Distinct()
+                .ToList();
+
+            if (contexts.Count == 0)
+            {
+                return null;
+            }
+
+            if (contexts.Count > 1)
+            {
+                error = $"Scene '{scene.name}' contains multiple UDIContext components. Scene-level injection supports exactly one UDIContext per scene.";
+                return null;
+            }
+
+            return contexts[0];
+        }
+
+        private void InjectContextObjects()
+        {
+            if (_injectWholeScene)
             {
                 Scene scene = gameObject.scene;
                 foreach (GameObject rootGameObject in scene.GetRootGameObjects())
@@ -160,6 +185,28 @@ namespace UTools
             }
 
             _container.InjectGameObject(gameObject);
+        }
+
+        private void ConfigureSceneOwnership()
+        {
+            UDIContext sceneContext = FindUniqueSceneContext(gameObject.scene, out string error);
+            if (error != null)
+            {
+                throw new InvalidOperationException(error);
+            }
+
+            if (sceneContext == null)
+            {
+                throw new InvalidOperationException($"Scene '{gameObject.scene.name}' does not contain a UDIContext.");
+            }
+
+            if (sceneContext != this)
+            {
+                throw new InvalidOperationException($"UDIContext '{name}' is not the active scene context for scene '{gameObject.scene.name}'.");
+            }
+
+            _injectWholeScene = true;
+            _bootstrapRoot = transform.root != null ? transform.root.gameObject : gameObject;
         }
 
         private UDIContext GetParentContext()
@@ -179,6 +226,38 @@ namespace UTools
             return null;
         }
 
+        private void SuspendSceneRootsUntilReadyIfNeeded()
+        {
+            if (!_injectWholeScene || !_container.HasRequiredForContextStartBindings)
+            {
+                return;
+            }
+
+            foreach (GameObject rootGameObject in gameObject.scene.GetRootGameObjects())
+            {
+                if (rootGameObject == null || rootGameObject == _bootstrapRoot || !rootGameObject.activeSelf)
+                {
+                    continue;
+                }
+
+                _suspendedSceneRoots.Add(rootGameObject);
+                rootGameObject.SetActive(false);
+            }
+        }
+
+        private void RestoreSuspendedSceneRoots()
+        {
+            foreach (GameObject rootGameObject in _suspendedSceneRoots)
+            {
+                if (rootGameObject != null)
+                {
+                    rootGameObject.SetActive(true);
+                }
+            }
+
+            _suspendedSceneRoots.Clear();
+        }
+
         private async Task<UDIContainer> ResolveParentContainerAsync()
         {
             UDIContext parentContext = GetParentContext();
@@ -195,28 +274,6 @@ namespace UTools
             }
 
             return null;
-        }
-
-        private void PrepareManagedContentRoot()
-        {
-            if (_managedContentRoot == null)
-            {
-                return;
-            }
-
-            if (_managedContentRoot.activeSelf)
-            {
-                Debug.LogWarning($"ManagedContentRoot '{_managedContentRoot.name}' should start inactive so UDIContext can guarantee async readiness.");
-                _managedContentRoot.SetActive(false);
-            }
-        }
-
-        private void ActivateManagedContentRoot()
-        {
-            if (_managedContentRoot != null)
-            {
-                _managedContentRoot.SetActive(true);
-            }
         }
     }
 

@@ -19,6 +19,8 @@ namespace UTools
 
         private LifecycleManager _lifecycleManager;
 
+        internal bool HasRequiredForContextStartBindings => _bindingOrder.Any(item => item.RequiredForContextStart);
+
         public UDIContainer(UDIContainer parentContainer = null, LifecycleManager lifecycleManager = null, bool allowGlobalBindings = false)
         {
             _parentContainer = parentContainer;

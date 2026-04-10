@@ -14,5 +14,9 @@ public class GameInstaller : MonoInstaller
         container.Bind<ILogService>()
             .To<LogService>()
             .AsSingle();
+        container.Bind<RemoteConfigService>()
+        .ToSelf()
+        .AsSingle()
+        .RequiredForContextStart();
     }
 }

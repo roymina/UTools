@@ -9,7 +9,7 @@ UTools is a lightweight Unity toolkit focused on four areas:
 
 ## Recommended Usage
 
-1. Add a `UDIContext` to a scene root.
+1. Add exactly one explicit `UDIContext` to the scene.
 2. Attach `MonoInstaller` or `ScriptableObjectInstaller` instances.
 3. Register services through `container.Bind<T>()`.
 4. Use `[Inject]`, `[Child]`, `[Comp]`, and `[Resource]` in runtime scripts.
@@ -19,7 +19,8 @@ UTools is a lightweight Unity toolkit focused on four areas:
 - Create a single `GlobalInstaller` asset inside a `Resources` folder.
 - Register cross-scene fallback services with `.AsGlobal()`.
 - Global services are available in scenes without a `UDIContext`.
-- If a scene root has its own `UDIContext`, local bindings override global ones.
+- If a scene has a single `UDIContext`, local bindings override global ones for the entire scene.
+- If a scene contains multiple `UDIContext` components, initialization fails instead of partially injecting objects.
 
 ```csharp
 using UTools;
@@ -42,8 +43,11 @@ public sealed class GameGlobalInstaller : GlobalInstaller
 
 - Services that must finish loading before a context starts can implement `IAsyncInitializable`.
 - Mark those bindings with `.RequiredForContextStart()`.
-- Assign `ManagedContentRoot` on `UDIContext` to delay activating scene content until required async services are ready.
-- If async initialization fails, the context stays not-ready and keeps `ManagedContentRoot` inactive.
+- Keep `UDIContext` and installers on a dedicated bootstrap object.
+- When a scene uses a single `UDIContext`, other active scene roots are suspended until required async services are ready.
+- Put camera, lighting, loading UI, and installers under the bootstrap root if they must remain active during async startup.
+- Put gameplay/content in separate scene roots when they should stay suspended until startup completes.
+- If async initialization fails, the context stays not-ready and suspended scene roots are not restored.
 
 ```csharp
 using System.Threading;
@@ -68,7 +72,6 @@ public sealed class ConfigService : IAsyncInitializable
 
 - `UDIContext` is the only recommended DI entry point.
 - `GlobalInstaller` assets must live under `Resources`.
-- `ManagedContentRoot` should start inactive when a context depends on required async services.
 - Constructor injection is not supported.
 - Identifier-based resolution is not part of the recommended API surface.
 

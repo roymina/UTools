@@ -43,7 +43,10 @@ Notes:
 - There is no `UDIInstallerBase` in the current codebase.
 - `MonoInstaller` and `ScriptableObjectInstaller` are the supported installer types.
 - `GlobalInstaller` assets must be placed under `Resources` to enable hidden cross-scene global injection.
-- `ManagedContentRoot` is the recommended way to hold content inactive until required async services finish.
+- A scene-level local container requires exactly one explicit `UDIContext` in the scene.
+- Keep `UDIContext` and `MonoInstaller` on a dedicated bootstrap object; consumers can live anywhere else in the scene.
+- If a scene contains multiple `UDIContext` components, initialization fails with an error instead of partially injecting objects.
+- `ManagedContentRoot` still works, and required async services now also suspend other scene roots until injection is ready.
 
 #### UDI Example: register services and start a scene context
 
@@ -193,6 +196,9 @@ public sealed class ConfigService : IAsyncInitializable
     }
 }
 ```
+
+- With a single scene `UDIContext`, required async services suspend other active scene roots until initialization finishes.
+- Keep gameplay consumers off the bootstrap object so they do not wake before the scene context restores the scene.
 
 ### UFind
 

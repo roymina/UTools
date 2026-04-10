@@ -12,6 +12,9 @@ public class Consummer : MonoBehaviour, IInitializable, ITickable
     [Inject]
     private CountService _countService;
 
+    [Inject]
+    private RemoteConfigService _remoteConfigService;
+
     [SerializeField]
     private GameObject _spwanerPrefab;
 

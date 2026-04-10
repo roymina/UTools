@@ -45,7 +45,10 @@ UTools 是一个轻量级 Unity 工具集，主要包含四个实用模块：
 - 当前没有 `UDIInstallerBase`
 - 推荐使用 `MonoInstaller` 与 `ScriptableObjectInstaller`
 - `GlobalInstaller` 资源需放在 `Resources` 目录下，才能启用跨场景全局注入
-- 当上下文依赖耗时初始化服务时，推荐使用 `ManagedContentRoot` 延迟激活场景内容
+- 场景级本地注入要求场景中显式且唯一地放置一个 `UDIContext`
+- 推荐把 `UDIContext` 与 `MonoInstaller` 放在单独的 Bootstrap 物体上，业务消费者可位于场景任意层级
+- 如果场景里出现多个 `UDIContext`，初始化会直接报错，而不是做部分注入
+- 当上下文依赖耗时初始化服务时，推荐使用 `ManagedContentRoot` 延迟激活场景内容；若存在 Required 异步服务，其它场景根对象也会一并等待
 
 #### UDI 示例：注册服务并启动场景 Context
 
@@ -146,7 +149,13 @@ public sealed class EnemySpawner : MonoBehaviour
     }
 }
 ```
+#### UDI 全局注入使用方式
 
+- 在 `Resources` 目录下创建一个 `GlobalInstaller` 资源
+- 在 `GlobalInstaller` 中注册少量跨场景常驻服务，并使用 `.AsGlobal()`
+- 没有 `UDIContext` 的场景也可以直接注入这些全局服务
+- 如果某个场景根对象上挂了普通 `UDIContext`，则该本地上下文中的绑定优先于全局绑定
+- 
 #### UDI 示例：注册跨场景全局服务
 
 ```csharp
@@ -165,6 +174,16 @@ public sealed class GameGlobalInstaller : GlobalInstaller
     }
 }
 ```
+
+#### UDI 异步初始化使用方式
+
+- 对于必须先加载完成的数据 / 服务，实现 `IAsyncInitializable`
+- 对应绑定增加 `.RequiredForContextStart()`
+- 在 `UDIContext` 上指定 `ManagedContentRoot`
+- `ManagedContentRoot` 会在 Required 异步服务初始化成功后才被注入并激活
+- 当场景使用唯一 `UDIContext` 时，其它已激活的场景根对象也会在初始化完成前保持暂停
+- 如果初始化失败，Context 会保持未就绪状态，`ManagedContentRoot` 也不会被激活
+
 
 #### UDI 示例：等待异步服务就绪后再启动场景内容
 
@@ -195,21 +214,6 @@ public sealed class ConfigService : IAsyncInitializable
     }
 }
 ```
-
-#### UDI 全局注入使用方式
-
-- 在 `Resources` 目录下创建一个 `GlobalInstaller` 资源
-- 在 `GlobalInstaller` 中注册少量跨场景常驻服务，并使用 `.AsGlobal()`
-- 没有 `UDIContext` 的场景也可以直接注入这些全局服务
-- 如果某个场景根对象上挂了普通 `UDIContext`，则该本地上下文中的绑定优先于全局绑定
-
-#### UDI 异步初始化使用方式
-
-- 对于必须先加载完成的数据 / 服务，实现 `IAsyncInitializable`
-- 对应绑定增加 `.RequiredForContextStart()`
-- 在 `UDIContext` 上指定 `ManagedContentRoot`
-- `ManagedContentRoot` 会在 Required 异步服务初始化成功后才被注入并激活
-- 如果初始化失败，Context 会保持未就绪状态，`ManagedContentRoot` 也不会被激活
 
 ### UFind
 

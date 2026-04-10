@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -154,23 +153,22 @@ namespace UTools
                 return;
             }
 
+            UDIContext sceneContext = UDIContext.FindUniqueSceneContext(scene, out string error);
+            if (error != null)
+            {
+                throw new InvalidOperationException(error);
+            }
+
+            if (sceneContext != null)
+            {
+                sceneContext.Initialize();
+                return;
+            }
+
             foreach (GameObject rootGameObject in scene.GetRootGameObjects())
             {
                 if (_instance != null && rootGameObject == _instance.gameObject)
                 {
-                    continue;
-                }
-
-                UDIContext context = rootGameObject.GetComponent<UDIContext>();
-                if (context != null)
-                {
-                    context.Initialize();
-                    continue;
-                }
-
-                if (rootGameObject.GetComponentsInChildren<UDIContext>(true).Any())
-                {
-                    Debug.LogWarning($"Scene root '{rootGameObject.name}' contains a nested UDIContext. v1 only supports local UDIContext on scene root objects.");
                     continue;
                 }
 

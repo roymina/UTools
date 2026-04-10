@@ -1,49 +1,183 @@
 using System.Collections;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 
 namespace UTools.Tests
 {
     public class UDIAsyncAndFactoryPlayModeTests
     {
-        [UnityTest]
-        public IEnumerator RequiredAsyncServices_ActivateManagedContentRootAfterInitialization()
+        [UnitySetUp]
+        public IEnumerator SetUp()
         {
-            GameObject root = new("ContextRoot");
-            root.SetActive(false);
+            Scene scene = SceneManager.CreateScene($"InitTestScene{System.Guid.NewGuid()}");
+            SceneManager.SetActiveScene(scene);
+            yield return null;
+        }
 
-            GameObject contentRoot = new("ContentRoot");
-            contentRoot.transform.SetParent(root.transform);
-            contentRoot.SetActive(false);
+        [TearDown]
+        public void TearDown()
+        {
+            ResetGlobalRuntime();
+            ResetFactoryContainer();
+        }
 
-            AsyncConsumer consumer = contentRoot.AddComponent<AsyncConsumer>();
-            UDIContext context = root.AddComponent<UDIContext>();
-            SetManagedContentRoot(context, contentRoot);
+        [UnityTest]
+        public IEnumerator SceneContext_WithGlobalContainer_InjectsSiblingRootUsingLocalBindings()
+        {
+            GameObject globalHost = CreateGlobalContainerHost(new MarkerService("global"));
 
+            GameObject bootstrap = new("Bootstrap");
+            bootstrap.SetActive(false);
+
+            UDIContext context = bootstrap.AddComponent<UDIContext>();
+            MarkerInstaller installer = bootstrap.AddComponent<MarkerInstaller>();
+            installer.Service = new MarkerService("local");
+
+            GameObject sibling = new("Sibling");
+            sibling.SetActive(false);
+            MarkerConsumer consumer = sibling.AddComponent<MarkerConsumer>();
+
+            bootstrap.SetActive(true);
+            sibling.SetActive(true);
+
+            yield return new WaitUntil(() => context.IsReady);
+            yield return null;
+
+            Assert.That(consumer.Service, Is.Not.Null);
+            Assert.That(consumer.Service.Source, Is.EqualTo("local"));
+            Assert.That(consumer.AwakenedWithService, Is.True);
+
+            Object.Destroy(sibling);
+            Object.Destroy(bootstrap);
+            Object.Destroy(globalHost);
+        }
+
+        [UnityTest]
+        public IEnumerator SceneContext_WithRequiredAsyncServices_FreezesSiblingRootsUntilReady()
+        {
+            GameObject bootstrap = new("Bootstrap");
+            bootstrap.SetActive(false);
+
+            UDIContext context = bootstrap.AddComponent<UDIContext>();
+            AsyncInstaller installer = bootstrap.AddComponent<AsyncInstaller>();
             AsyncGateService gateService = new();
-            AsyncInstaller installer = root.AddComponent<AsyncInstaller>();
             installer.Service = gateService;
 
-            root.SetActive(true);
+            GameObject bootstrapChild = new("BootstrapChild");
+            bootstrapChild.transform.SetParent(bootstrap.transform);
+            ActivationProbe bootstrapProbe = bootstrapChild.AddComponent<ActivationProbe>();
+
+            GameObject sibling = new("Sibling");
+            sibling.SetActive(true);
+
+            bootstrap.SetActive(true);
             yield return null;
 
             Assert.That(context.IsReady, Is.False);
-            Assert.That(contentRoot.activeSelf, Is.False);
+            Assert.That(bootstrap.activeSelf, Is.True);
+            Assert.That(bootstrapChild.activeInHierarchy, Is.True);
+            Assert.That(bootstrapProbe.AwakeCount, Is.EqualTo(1));
+            Assert.That(sibling.activeSelf, Is.False);
+
+            AsyncConsumer consumer = sibling.AddComponent<AsyncConsumer>();
             Assert.That(consumer.AwakeCount, Is.EqualTo(0));
 
             gateService.Complete();
             yield return new WaitUntil(() => context.IsReady);
             yield return null;
 
-            Assert.That(contentRoot.activeSelf, Is.True);
+            Assert.That(sibling.activeSelf, Is.True);
             Assert.That(consumer.Service, Is.Not.Null);
             Assert.That(consumer.AwakenedWithService, Is.True);
 
+            Object.Destroy(sibling);
+            Object.Destroy(bootstrap);
+        }
+
+        [UnityTest]
+        public IEnumerator SceneContext_WithoutRequiredAsyncServices_DoesNotFreezeSiblingRoots()
+        {
+            GameObject bootstrap = new("Bootstrap");
+            bootstrap.SetActive(false);
+
+            UDIContext context = bootstrap.AddComponent<UDIContext>();
+            MarkerInstaller installer = bootstrap.AddComponent<MarkerInstaller>();
+            installer.Service = new MarkerService("local");
+
+            GameObject sibling = new("Sibling");
+            sibling.SetActive(false);
+            MarkerConsumer consumer = sibling.AddComponent<MarkerConsumer>();
+
+            bootstrap.SetActive(true);
+            sibling.SetActive(true);
+            yield return null;
+            yield return new WaitUntil(() => context.IsReady);
+            yield return null;
+
+            Assert.That(bootstrap.activeSelf, Is.True);
+            Assert.That(sibling.activeSelf, Is.True);
+            Assert.That(consumer.Service, Is.Not.Null);
+            Assert.That(consumer.AwakenedWithService, Is.True);
+
+            Object.Destroy(sibling);
+            Object.Destroy(bootstrap);
+        }
+
+        [UnityTest]
+        public IEnumerator SceneContext_WithMultipleContexts_LogsErrorAndDoesNotInitialize()
+        {
+            GameObject firstRoot = new("FirstContextRoot");
+            firstRoot.SetActive(false);
+            UDIContext firstContext = firstRoot.AddComponent<UDIContext>();
+            MarkerInstaller firstInstaller = firstRoot.AddComponent<MarkerInstaller>();
+            firstInstaller.Service = new MarkerService("first");
+
+            GameObject secondRoot = new("SecondContextRoot");
+            secondRoot.SetActive(false);
+            UDIContext secondContext = secondRoot.AddComponent<UDIContext>();
+            MarkerInstaller secondInstaller = secondRoot.AddComponent<MarkerInstaller>();
+            secondInstaller.Service = new MarkerService("second");
+
+            LogAssert.Expect(LogType.Error, new Regex("UDIContext.*multiple.*scene|scene.*multiple.*UDIContext", RegexOptions.IgnoreCase));
+            LogAssert.Expect(LogType.Error, new Regex("UDIContext.*multiple.*scene|scene.*multiple.*UDIContext", RegexOptions.IgnoreCase));
+
+            firstRoot.SetActive(true);
+            secondRoot.SetActive(true);
+            yield return null;
+
+            Assert.That(firstContext.IsReady, Is.False);
+            Assert.That(secondContext.IsReady, Is.False);
+            Assert.That(firstContext.InitializationException, Is.Not.Null);
+            Assert.That(secondContext.InitializationException, Is.Not.Null);
+
+            Object.Destroy(firstRoot);
+            Object.Destroy(secondRoot);
+        }
+
+        [UnityTest]
+        public IEnumerator GlobalRuntime_WithoutSceneContext_InjectsRootObjects()
+        {
+            GameObject globalHost = CreateGlobalContainerHost(new MarkerService("global"));
+
+            GameObject root = new("GlobalConsumerRoot");
+            root.SetActive(false);
+            MarkerConsumer consumer = root.AddComponent<MarkerConsumer>();
+
+            root.SetActive(true);
+            InvokeGlobalSceneInjection(root.scene);
+            yield return null;
+
+            Assert.That(consumer.Service, Is.Not.Null);
+            Assert.That(consumer.Service.Source, Is.EqualTo("global"));
+
             Object.Destroy(root);
+            Object.Destroy(globalHost);
         }
 
         [UnityTest]
@@ -75,11 +209,53 @@ namespace UTools.Tests
             Object.Destroy(root);
         }
 
-        private static void SetManagedContentRoot(UDIContext context, GameObject managedContentRoot)
+        private static GameObject CreateGlobalContainerHost(MarkerService service)
         {
-            typeof(UDIContext)
-                .GetField("_managedContentRoot", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.SetValue(context, managedContentRoot);
+            GameObject host = new("GlobalHost");
+            LifecycleManager lifecycleManager = host.AddComponent<LifecycleManager>();
+            UDIContainer container = new(null, lifecycleManager, allowGlobalBindings: true);
+            container.Bind<MarkerService>()
+                .FromInstance(service)
+                .AsSingle()
+                .AsGlobal();
+            container.FinalizeBindings();
+
+            SetGlobalRuntime(container);
+            return host;
+        }
+
+        private static void SetGlobalRuntime(UDIContainer container)
+        {
+            System.Type runtimeType = typeof(UDIContext).Assembly.GetType("UTools.UDIGlobalRuntime");
+            runtimeType?.GetField("_bootstrapAttempted", BindingFlags.Static | BindingFlags.NonPublic)?.SetValue(null, true);
+            runtimeType?.GetField("_container", BindingFlags.Static | BindingFlags.NonPublic)?.SetValue(null, container);
+            runtimeType?.GetField("_readyTask", BindingFlags.Static | BindingFlags.NonPublic)?.SetValue(null, Task.CompletedTask);
+            runtimeType?.GetField("_initializationException", BindingFlags.Static | BindingFlags.NonPublic)?.SetValue(null, null);
+            runtimeType?.GetField("_instance", BindingFlags.Static | BindingFlags.NonPublic)?.SetValue(null, null);
+        }
+
+        private static void ResetGlobalRuntime()
+        {
+            System.Type runtimeType = typeof(UDIContext).Assembly.GetType("UTools.UDIGlobalRuntime");
+            runtimeType?.GetField("_bootstrapAttempted", BindingFlags.Static | BindingFlags.NonPublic)?.SetValue(null, false);
+            runtimeType?.GetField("_container", BindingFlags.Static | BindingFlags.NonPublic)?.SetValue(null, null);
+            runtimeType?.GetField("_readyTask", BindingFlags.Static | BindingFlags.NonPublic)?.SetValue(null, null);
+            runtimeType?.GetField("_initializationException", BindingFlags.Static | BindingFlags.NonPublic)?.SetValue(null, null);
+            runtimeType?.GetField("_instance", BindingFlags.Static | BindingFlags.NonPublic)?.SetValue(null, null);
+        }
+
+        private static void ResetFactoryContainer()
+        {
+            typeof(UGameObjectFactory)
+                .GetField("_container", BindingFlags.Static | BindingFlags.NonPublic)
+                ?.SetValue(null, null);
+        }
+
+        private static void InvokeGlobalSceneInjection(UnityEngine.SceneManagement.Scene scene)
+        {
+            System.Type runtimeType = typeof(UDIContext).Assembly.GetType("UTools.UDIGlobalRuntime");
+            runtimeType?.GetMethod("InjectScene", BindingFlags.Static | BindingFlags.NonPublic)
+                ?.Invoke(null, new object[] { scene });
         }
 
         private sealed class AsyncInstaller : MonoInstaller
@@ -127,6 +303,16 @@ namespace UTools.Tests
         {
         }
 
+        private sealed class MarkerService
+        {
+            public MarkerService(string source)
+            {
+                Source = source;
+            }
+
+            public string Source { get; }
+        }
+
         private sealed class AsyncConsumer : MonoBehaviour
         {
             [Inject] public AsyncGateService Service;
@@ -141,9 +327,43 @@ namespace UTools.Tests
             }
         }
 
+        private sealed class ActivationProbe : MonoBehaviour
+        {
+            public int AwakeCount { get; private set; }
+
+            private void Awake()
+            {
+                AwakeCount++;
+            }
+        }
+
         private sealed class LocalConsumer : MonoBehaviour
         {
             [Inject] public LocalMarkerService Service;
+
+            public bool AwakenedWithService { get; private set; }
+
+            private void Awake()
+            {
+                AwakenedWithService = Service != null;
+            }
+        }
+
+        private sealed class MarkerInstaller : MonoInstaller
+        {
+            public MarkerService Service { get; set; }
+
+            public override void InstallBindings(UDIContainer container)
+            {
+                container.Bind<MarkerService>()
+                    .FromInstance(Service)
+                    .AsSingle();
+            }
+        }
+
+        private sealed class MarkerConsumer : MonoBehaviour
+        {
+            [Inject] public MarkerService Service;
 
             public bool AwakenedWithService { get; private set; }
 
