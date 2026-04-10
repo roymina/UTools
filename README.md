@@ -204,6 +204,7 @@ public sealed class ConfigService : IAsyncInitializable
 
 - `[Comp]` binds a component on the same GameObject
 - `[Child]` binds a child GameObject or a component on a child
+- `[Children]` binds a `List<T>` from the children of a named parent object
 - `[Child("Root/Panel/Button")]` supports path lookup
 - `[Resource]` loads from `Resources`
 - `UBehaviour` caches reflection metadata to avoid repeated scans
@@ -224,6 +225,9 @@ public sealed class InventoryPanel : UBehaviour
     [Child] public TextMeshProUGUI Title;
     [Child("Content/Buttons/ConfirmButton")] public Button ConfirmButton;
     [Child("Content/Icon")] public Image Icon;
+    [Children("Content/Buttons")] public List<Button> ContentButtons;
+    [Children(parentName = "Content/Buttons", includeDecendents = true, includeInactive = false)]
+    public List<GameObject> ActiveButtonNodes;
 
     [Resource("Icons/Inventory")] public Sprite InventorySprite;
 
@@ -241,6 +245,10 @@ public sealed class InventoryPanel : UBehaviour
 - If `[Child]` has no argument, the field name is used.
 - If the field type is `GameObject`, the child object itself is assigned.
 - If the field type is a component, UTools finds the child first, then gets the component from that child.
+- If `[Children]` has no `parentName`, the field name is used to locate the parent object first.
+- `[Children]` only supports `List<GameObject>` and `List<TComponent>`.
+- `[Children]` defaults to first-level children only and includes inactive children.
+- If `[Children]` targets components, UTools checks each collected child and keeps only the ones that contain that component.
 - If multiple children share the same name, use a path instead of a simple name.
 
 ### UMessage

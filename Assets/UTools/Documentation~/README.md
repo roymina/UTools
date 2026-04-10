@@ -13,6 +13,7 @@ UTools is a lightweight Unity toolkit focused on four areas:
 2. Attach `MonoInstaller` or `ScriptableObjectInstaller` instances.
 3. Register services through `container.Bind<T>()`.
 4. Use `[Inject]`, `[Child]`, `[Comp]`, and `[Resource]` in runtime scripts.
+5. Use `[Children]` when you need a `List<T>` from a parent object's child hierarchy.
 
 ## Global Injection
 
@@ -74,6 +75,33 @@ public sealed class ConfigService : IAsyncInitializable
 - `GlobalInstaller` assets must live under `Resources`.
 - Constructor injection is not supported.
 - Identifier-based resolution is not part of the recommended API surface.
+
+## UFind
+
+- `[Comp]` binds a component on the same GameObject
+- `[Child]` binds a single child GameObject or a component on a child
+- `[Children]` binds a `List<GameObject>` or `List<TComponent>` from a parent object's children
+- `[Resource]` loads from `Resources`
+
+```csharp
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using UTools;
+
+public sealed class LobbyPanel : UBehaviour
+{
+    [Children] public List<GameObject> SlotGroup;
+    [Children("SlotGroup")] public List<Button> SlotButtons;
+    [Children(parentName = "SlotGroup", includeDecendents = true, includeInactive = false)]
+    public List<GameObject> ActiveSlotNodes;
+}
+```
+
+- If `[Children]` has no `parentName`, the field name is used to find the parent object.
+- `[Children]` defaults to first-level children only (`includeDecendents = false`).
+- `[Children]` includes inactive children by default (`includeInactive = true`).
+- Component lists only keep children that actually contain the requested component.
 
 ## Testing
 

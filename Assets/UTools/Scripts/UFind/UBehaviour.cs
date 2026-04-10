@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -17,6 +18,7 @@ namespace UTools
             CachedFields cachedFields = GetCachedFields(GetType());
             GetComp(cachedFields.CompFields);
             FindChildren(cachedFields.ChildFields);
+            FindChildrenCollections(cachedFields.ChildrenFields);
             GetResources(cachedFields.ResourceFields);
         }
 
@@ -28,6 +30,7 @@ namespace UTools
                 cachedFields = new CachedFields(
                     fields.Where(field => Attribute.IsDefined(field, typeof(CompAttribute))).ToArray(),
                     fields.Where(field => Attribute.IsDefined(field, typeof(ChildAttribute))).ToArray(),
+                    fields.Where(field => Attribute.IsDefined(field, typeof(ChildrenAttribute))).ToArray(),
                     fields.Where(field => Attribute.IsDefined(field, typeof(ResourceAttribute))).ToArray());
                 CachedFieldsByType[type] = cachedFields;
             }
@@ -126,6 +129,64 @@ namespace UTools
             }
         }
 
+        private void FindChildrenCollections(FieldInfo[] fields)
+        {
+            if (fields.Length == 0 || transform.childCount == 0)
+            {
+                return;
+            }
+
+            if (children == null || children.Length == 0)
+            {
+                children = UUtils.GetAllDecendents(gameObject);
+            }
+
+            foreach (FieldInfo field in fields)
+            {
+                if (field.GetValue(this) != null)
+                {
+                    continue;
+                }
+
+                if (!TryCreateChildrenCollection(field, out Type elementType, out IList values))
+                {
+                    Debug.LogError($"ChildrenAttribute on {field.Name} must target List<GameObject> or List<Component>");
+                    continue;
+                }
+
+                ChildrenAttribute childrenAttr = field.GetCustomAttribute<ChildrenAttribute>();
+                string parentName = string.IsNullOrEmpty(childrenAttr.parentName) ? field.Name : childrenAttr.parentName;
+                GameObject parent = ResolveChildTarget(parentName);
+                if (parent == null)
+                {
+                    Debug.LogError($"GameObject '{parentName}' not found under {gameObject.name}");
+                    continue;
+                }
+
+                IEnumerable<GameObject> targets = EnumerateChildren(parent, childrenAttr.includeDecendents, childrenAttr.includeInactive);
+                if (elementType == typeof(GameObject))
+                {
+                    foreach (GameObject target in targets)
+                    {
+                        values.Add(target);
+                    }
+                }
+                else
+                {
+                    foreach (GameObject target in targets)
+                    {
+                        Component component = target.GetComponent(elementType);
+                        if (component != null)
+                        {
+                            values.Add(component);
+                        }
+                    }
+                }
+
+                field.SetValue(this, values);
+            }
+        }
+
         private GameObject ResolveChildTarget(string targetName)
         {
             if (targetName.Contains("/"))
@@ -147,17 +208,53 @@ namespace UTools
             return matches.FirstOrDefault();
         }
 
+        private static bool TryCreateChildrenCollection(FieldInfo field, out Type elementType, out IList values)
+        {
+            elementType = null;
+            values = null;
+
+            if (!field.FieldType.IsGenericType || field.FieldType.GetGenericTypeDefinition() != typeof(List<>))
+            {
+                return false;
+            }
+
+            elementType = field.FieldType.GetGenericArguments()[0];
+            if (elementType != typeof(GameObject) && !typeof(Component).IsAssignableFrom(elementType))
+            {
+                return false;
+            }
+
+            values = (IList)Activator.CreateInstance(field.FieldType);
+            return true;
+        }
+
+        private static IEnumerable<GameObject> EnumerateChildren(GameObject parent, bool includeDecendents, bool includeInactive)
+        {
+            IEnumerable<GameObject> targets = includeDecendents
+                ? parent.GetAllDecendents()
+                : parent.transform.Cast<Transform>().Select(child => child.gameObject);
+
+            if (!includeInactive)
+            {
+                targets = targets.Where(child => child.activeInHierarchy);
+            }
+
+            return targets;
+        }
+
         private sealed class CachedFields
         {
-            public CachedFields(FieldInfo[] compFields, FieldInfo[] childFields, FieldInfo[] resourceFields)
+            public CachedFields(FieldInfo[] compFields, FieldInfo[] childFields, FieldInfo[] childrenFields, FieldInfo[] resourceFields)
             {
                 CompFields = compFields;
                 ChildFields = childFields;
+                ChildrenFields = childrenFields;
                 ResourceFields = resourceFields;
             }
 
             public FieldInfo[] CompFields { get; }
             public FieldInfo[] ChildFields { get; }
+            public FieldInfo[] ChildrenFields { get; }
             public FieldInfo[] ResourceFields { get; }
         }
     }
