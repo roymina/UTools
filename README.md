@@ -1,154 +1,191 @@
-[中文](https://github.com/roymina/UTools/blob/main/README_cn.md)
+[中文](README_cn.md)
 
 # UTools
 
-UTools is a lightweight Unity toolkit that groups four practical modules:
+![Unity](https://img.shields.io/badge/Unity-2023.2%2B-000000?logo=unity&logoColor=white)
+![UPM](https://img.shields.io/badge/UPM-Git%20URL-blue)
+![Version](https://img.shields.io/badge/version-0.5.1-blue)
+![C#](https://img.shields.io/badge/C%23-Unity-239120?logo=csharp&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-EditMode%20%7C%20PlayMode-brightgreen)
 
-- `UDI`: dependency injection and runtime lifecycle management
-- `UFind`: attribute-based component, child, and resource binding
-- `UMessage`: typed publish / subscribe messaging
-- `UUtils`: common runtime helpers for strings, files, UI, meshes, textures, and GameObjects
+UTools is a lightweight Unity toolkit for dependency injection, UI/object lookup, message dispatching, and common runtime helpers.
+
+| Module | What it is for |
+| --- | --- |
+| `UDI` | Scene/global dependency injection, lifecycle callbacks, async startup gates |
+| `UFind` | Attribute-based component, child, children-list, and `Resources` binding |
+| `UMessage` | Typed publish/subscribe messages with disposable subscriptions |
+| `UUtils` | String, time, file, GameObject, UI, texture, and mesh helpers |
+| Editor helpers | Small Inspector attributes such as buttons, conditional fields, and component toggles |
 
 ## Installation
 
 ### Git URL / UPM
 
-In `Package Manager`, choose `Add package from git URL...` and use:
+Open `Window > Package Manager`, choose `Add package from git URL...`, then use:
 
-`https://github.com/roymina/UTools.git?path=/Assets/UTools`
+```text
+https://github.com/roymina/UTools.git?path=/Assets/UTools
+```
 
-This repository remains a normal Unity project, while `Assets/UTools` is exposed as the package root.
+This repository is still a normal Unity project. `Assets/UTools` is the package root exposed to UPM.
 
-`TextMeshPro` is pulled in through the official Unity package dependency `com.unity.textmeshpro`.
-If imported samples show missing TMP assets, run `Window > TextMeshPro > Import TMP Essential Resources` once.
+`TextMeshPro` is declared through `com.unity.textmeshpro`. If sample UI assets miss TMP resources, run:
+
+```text
+Window > TextMeshPro > Import TMP Essential Resources
+```
 
 ### `unitypackage`
 
-Use the packaged release artifact in `Releases/` if you prefer manual import.
+If you prefer manual import, use the packaged release artifact in `Releases/`.
 
-## Module Overview
+## Quick Start
 
-### UDI
-
-- Uses `UDIContext` as the DI entry point
-- Supports field, property, and method injection via `[Inject]`
-- Supports post-injection callbacks via `[PostInjection]`
-- Supports `IInitializable`, `IAsyncInitializable`, `ITickable`, `ILateTickable`, `IFixedTickable`, `IUDisposable`, `IPausable`
-- Supports `AsSingle()`, `AsTransient()`, `InScope(...)`, `FromInstance(...)`, `FromGameObject(...)`, `AsGlobal()`, `RequiredForContextStart()`, `NonLazy()`
-- Supports scene injection and injected prefab instantiation through `UGameObjectFactory`
-
-Notes:
-
-- Constructor injection is not supported.
-- There is no `UDIInstallerBase` in the current codebase.
-- `MonoInstaller` and `ScriptableObjectInstaller` are the supported installer types.
-- `GlobalInstaller` assets must be placed under `Resources` to enable hidden cross-scene global injection.
-- A scene-level local container requires exactly one explicit `UDIContext` in the scene.
-- Keep `UDIContext` and `MonoInstaller` on a dedicated bootstrap object; consumers can live anywhere else in the scene.
-- If a scene contains multiple `UDIContext` components, initialization fails with an error instead of partially injecting objects.
-- Use `AsyncWaitRoot` when only one subtree should wait for required async services; objects outside that subtree keep running immediately.
-
-#### UDI Example: register services and start a scene context
+1. Install the package.
+2. Add exactly one `UDIContext` to a scene bootstrap GameObject.
+3. Add a `MonoInstaller` to the same bootstrap object, or assign installers into the `UDIContext` lists.
+4. Register services in `InstallBindings`.
+5. Use `[Inject]` on scene components and use `UGameObjectFactory` for injected runtime prefabs.
 
 ```csharp
 using UnityEngine;
 using UTools;
 
-public interface ILogger
+public interface IGameClock
 {
-    void Log(string message);
+    float Time { get; }
 }
 
-public sealed class UnityLogger : ILogger
+public sealed class UnityGameClock : IGameClock
 {
-    public void Log(string message)
-    {
-        Debug.Log(message);
-    }
+    public float Time => UnityEngine.Time.time;
 }
 
 public sealed class GameInstaller : MonoInstaller
 {
+    public override void InstallBindings(UDIContainer container)
+    {
+        container.Bind<IGameClock>()
+            .To<UnityGameClock>()
+            .AsSingle();
+    }
+}
+
+public sealed class ClockLabel : MonoBehaviour
+{
+    [Inject] private IGameClock _clock;
+
+    private void Start()
+    {
+        Debug.Log($"Injected time: {_clock.Time}");
+    }
+}
+```
+
+## UDI
+
+`UDI` is the dependency injection module. Use it to prepare services, inject scene objects, inject runtime prefabs, and run lifecycle interfaces from a single context.
+
+### Three Installer Types
+
+- `GlobalInstaller`: prepares **global fallback services for the whole game**.
+- `MonoInstaller`: prepares **scene-specific services for the current scene**.
+- `ScriptableObjectInstaller`: prepares **reusable asset-based config/services for the current scene**.
+
+### `UDIContext`
+
+Use `UDIContext` as the scene DI entry point.
+
+1. Create a dedicated `Bootstrap` GameObject.
+2. Add `UDIContext`.
+3. Add `MonoInstaller` components to the same GameObject, or assign them to `UDIContext` > `Installers`.
+4. Assign `ScriptableObjectInstaller` assets to `UDIContext` > `Scriptable Object Installers`.
+5. If any binding uses `.RequiredForContextStart()`, assign `Async Wait Root`.
+
+Notes:
+
+- Keep exactly one `UDIContext` in a scene. Multiple contexts cause initialization to fail.
+- Keep `UDIContext` and startup installers on a dedicated bootstrap object. Gameplay consumers can live anywhere in the scene.
+- A `MonoInstaller` is executed only when it is on the same GameObject as `UDIContext` or explicitly assigned into the `Installers` list.
+- A standalone `MonoInstaller` can auto-create a context when none exists, but explicit setup is safer and clearer.
+- `UDIContext.IsReady` tells whether startup completed; `ReadyTask` can be awaited by code that must wait manually.
+- If initialization throws, `InitializationException` is set and the context stays not ready.
+
+### `MonoInstaller`
+
+Use `MonoInstaller` when bindings need scene references such as transforms, prefabs, cameras, or serialized components.
+
+```csharp
+using UnityEngine;
+using UTools;
+
+public sealed class GameplayInstaller : MonoInstaller
+{
     [SerializeField] private Transform spawnRoot;
+    [SerializeField] private EnemyView enemyPrefab;
 
     public override void InstallBindings(UDIContainer container)
     {
-        container.Bind<ILogger>()
-            .To<UnityLogger>()
-            .AsSingle();
-
         container.Bind<Transform>()
             .FromInstance(spawnRoot)
             .AsSingle();
 
-        container.Bind<GameManager>()
+        container.Bind<EnemyService>()
             .ToSelf()
             .AsSingle()
             .NonLazy();
+
+        container.Bind<IFactory<EnemyView>>()
+            .FromInstance(new PrefabFactory<EnemyView>(enemyPrefab, container, spawnRoot))
+            .AsSingle();
     }
 }
 ```
 
-#### UDI Example: field, property, method, and post-injection
+Notes:
+
+- Put `.NonLazy()` at the end of the binding chain because it creates/finalizes the binding immediately.
+- Prefer `.FromInstance(...)` for serialized scene references.
+- Use `.FromGameObject(host)` for `MonoBehaviour` bindings when the component should be found or added on a specific object.
+- `FromGameObject` still reuses an existing instance of that `MonoBehaviour` type if Unity finds one first.
+
+### `ScriptableObjectInstaller`
+
+Use `ScriptableObjectInstaller` when the same binding set should be reused by multiple scenes.
 
 ```csharp
 using UnityEngine;
 using UTools;
 
-public sealed class GameManager : IInitializable, ITickable
+[CreateAssetMenu(menuName = "Game/Installers/Audio Installer")]
+public sealed class AudioInstaller : ScriptableObjectInstaller
 {
-    [Inject] private ILogger _logger;
+    [SerializeField] private AudioSettings settings;
 
-    [Inject]
-    public Transform SpawnRoot { get; private set; }
-
-    private Camera _mainCamera;
-
-    [Inject]
-    private void Construct(Camera mainCamera)
+    public override void InstallBindings(UDIContainer container)
     {
-        _mainCamera = mainCamera;
-    }
+        container.Bind<AudioSettings>()
+            .FromInstance(settings)
+            .AsSingle();
 
-    public void Initialize()
-    {
-        _logger.Log("GameManager initialized");
-    }
-
-    [PostInjection]
-    private void AfterInject()
-    {
-        _logger.Log($"Spawn root: {SpawnRoot.name}, camera: {_mainCamera.name}");
-    }
-
-    public void Tick()
-    {
+        container.Bind<AudioService>()
+            .ToSelf()
+            .AsSingle();
     }
 }
 ```
 
-#### UDI Example: instantiate a prefab and inject all child behaviours
+Usage:
 
-```csharp
-using UnityEngine;
-using UTools;
+- Create the asset from Unity's `Create` menu.
+- Assign it to `UDIContext` > `Scriptable Object Installers`.
+- Only assets assigned in that list are executed for the current scene.
+- Keep per-scene object references in `MonoInstaller`; keep reusable config/data in `ScriptableObjectInstaller`.
 
-public sealed class EnemySpawner : MonoBehaviour
-{
-    [SerializeField] private GameObject enemyPrefab;
-    [SerializeField] private Transform spawnPoint;
+### `GlobalInstaller`
 
-    public void Spawn()
-    {
-        UGameObjectFactory.InstantiateWithDependency(
-            enemyPrefab,
-            spawnPoint.position,
-            spawnPoint.rotation);
-    }
-}
-```
-
-#### UDI Example: register a cross-scene global fallback service
+Use `GlobalInstaller` for fallback services shared by scenes.
 
 ```csharp
 using UnityEngine;
@@ -167,7 +204,101 @@ public sealed class GameGlobalInstaller : GlobalInstaller
 }
 ```
 
-#### UDI Example: block a context until async services are ready
+Usage:
+
+- Create exactly one `GlobalInstaller` asset.
+- Put the asset under a `Resources` folder, for example `Assets/Resources/GameGlobalInstaller.asset`.
+- Use `.AsGlobal()` only inside a `GlobalInstaller`.
+- Scenes without `UDIContext` can still receive global services.
+- Scenes with one `UDIContext` use local bindings first, then fall back to global bindings.
+- Do not create multiple `GlobalInstaller` assets under `Resources`; the global runtime supports only one.
+
+### Binding API
+
+| API | Use it for |
+| --- | --- |
+| `Bind<T>()` | Register `T` as both contract and concrete type |
+| `Bind<TContract, TImplementation>()` | Register an interface/base type to an implementation |
+| `.To<T>()` | Set the concrete implementation |
+| `.ToSelf()` | Use the contract type itself as the concrete type |
+| `.AsSingle()` | Reuse one instance in the current container |
+| `.AsTransient()` | Create a new instance for each resolve |
+| `.InScope(BindingScope.Scoped)` | Cache one instance in the current context/container |
+| `.FromInstance(instance)` | Use an existing instance, usually a serialized reference |
+| `.FromGameObject(gameObject)` | Resolve or add a `MonoBehaviour` on a target GameObject |
+| `.NonLazy()` | Create the instance during context startup |
+| `.RequiredForContextStart()` | Wait for this binding before the async startup gate opens |
+| `.AsGlobal()` | Mark a global binding; only valid in `GlobalInstaller` |
+
+Notes:
+
+- Constructor injection is not supported.
+- If a concrete non-abstract class is resolved without an explicit binding, UDI can auto-create it with a parameterless constructor.
+- Prefer explicit bindings for services you rely on, especially interfaces and abstract types.
+- Circular dependencies throw an error instead of resolving partially.
+
+### Injection
+
+Use `[Inject]` on fields, writable properties, or methods. Private members are supported.
+
+```csharp
+using UnityEngine;
+using UTools;
+
+public sealed class PlayerPresenter : MonoBehaviour
+{
+    [Inject] private IGameClock _clock;
+
+    [Inject]
+    public Transform SpawnRoot { get; private set; }
+
+    private Camera _camera;
+
+    [Inject]
+    private void Construct(Camera camera)
+    {
+        _camera = camera;
+    }
+
+    [PostInjection]
+    private void AfterInject()
+    {
+        Debug.Log($"Clock={_clock.Time}, Root={SpawnRoot.name}, Camera={_camera.name}");
+    }
+}
+```
+
+Notes:
+
+- Injection order is fields, properties, methods, then `[PostInjection]`.
+- `[Inject]` methods can have parameters; each parameter is resolved from the container.
+- `[PostInjection]` runs after dependencies are assigned and can also receive resolved parameters.
+- Scene objects are injected by `UDIContext`; runtime prefabs should be created with `UGameObjectFactory` or `PrefabFactory<T>`.
+- UDI runs very early by default. Avoid setting consumer scripts to execute earlier than `UDIContext`.
+
+### Lifecycle Interfaces
+
+Implement lifecycle interfaces on services or injected objects when the context should manage them.
+
+| Interface | When it runs |
+| --- | --- |
+| `IInitializable.Initialize()` | After context injection is complete |
+| `IAsyncInitializable.InitializeAsync(...)` | Only awaited when the binding is marked `.RequiredForContextStart()` |
+| `ITickable.Tick()` | Every `Update` while not paused |
+| `IFixedTickable.FixedTick()` | Every `FixedUpdate` while not paused |
+| `ILateTickable.LateTick()` | Every `LateUpdate` while not paused |
+| `IUDisposable.Dispose()` | When the `LifecycleManager` is destroyed |
+| `IPausable.Pause()` / `Resume()` | When `LifecycleManager.Pause()` / `Resume()` is called |
+
+Notes:
+
+- `LifecycleManager` is added automatically to the `UDIContext` object if missing.
+- Non-lazy and resolved instances are tracked once.
+- `IAsyncInitializable` is not automatically awaited unless its binding is required for context start.
+
+### Async Injection and Waiting
+
+Use this when a scene subtree must not wake until required async services are ready.
 
 ```csharp
 using System.Threading;
@@ -175,41 +306,83 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UTools;
 
-public sealed class AsyncConfigInstaller : MonoInstaller
+public sealed class RemoteConfigService : IAsyncInitializable
 {
-    [SerializeField] private ConfigService configService;
+    public async Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await Task.Delay(3000, cancellationToken);
+    }
+}
 
+public sealed class GameInstaller : MonoInstaller
+{
     public override void InstallBindings(UDIContainer container)
     {
-        container.Bind<ConfigService>()
-            .FromInstance(configService)
+        container.Bind<RemoteConfigService>()
+            .ToSelf()
             .AsSingle()
             .RequiredForContextStart();
     }
 }
+```
 
-public sealed class ConfigService : IAsyncInitializable
+After this binding is registered:
+
+- Assign `Async Wait Root` on `UDIContext`.
+- On scene start, `Async Wait Root` is disabled if it was active.
+- Required async services run in binding registration order.
+- After they finish, UDI injects the `Async Wait Root` subtree, then restores its previous active state.
+- Objects outside `Async Wait Root` are injected immediately and keep running.
+
+Notes:
+
+- Put gameplay nodes that must wait under `Async Wait Root`.
+- Do not put the `UDIContext` object inside `Async Wait Root`.
+- `Async Wait Root` must belong to the same scene as the context.
+- If a required async binding exists but `Async Wait Root` is not assigned, initialization fails.
+- If `Async Wait Root` was inactive before startup, it stays inactive after async initialization, but it is still injected.
+- If async initialization fails or is cancelled, the context stays not ready and the wait root is not restored.
+
+### Runtime Prefab Injection
+
+Use `UGameObjectFactory` instead of `Object.Instantiate` for prefabs that contain `[Inject]` consumers.
+
+```csharp
+using UnityEngine;
+using UTools;
+
+public sealed class EnemySpawner : MonoBehaviour
 {
-    public Task InitializeAsync(CancellationToken cancellationToken)
+    [SerializeField] private GameObject enemyPrefab;
+    [SerializeField] private Transform spawnRoot;
+
+    public GameObject Spawn(Vector3 position)
     {
-        return Task.CompletedTask;
+        return UGameObjectFactory.InstantiateWithDependency(
+            enemyPrefab,
+            position,
+            Quaternion.identity,
+            spawnRoot);
     }
 }
 ```
 
-- With a single scene `UDIContext`, required async services suspend other active scene roots until initialization finishes.
-- Keep gameplay consumers off the bootstrap object so they do not wake before the scene context restores the scene.
+Notes:
 
-### UFind
+- Prefer overloads that pass a `Transform parent` when the instance should use the nearest parent context.
+- The factory injects all `MonoBehaviour` components in the created GameObject subtree.
+- If no context exists, the factory falls back to a global/default container and logs a warning.
 
-- `[Comp]` binds a component on the same GameObject
-- `[Child]` binds a child GameObject or a component on a child
-- `[Children]` binds a `List<T>` from the children of a named parent object
-- `[Child("Root/Panel/Button")]` supports path lookup
-- `[Resource]` loads from `Resources`
-- `UBehaviour` caches reflection metadata to avoid repeated scans
+## UFind
 
-#### UFind Example: auto-bind local components, children, and resources
+`UFind` reduces repetitive `GetComponent`, `transform.Find`, and `Resources.Load` code.
+
+### Basic Setup
+
+1. Inherit from `UBehaviour`.
+2. Add `[Comp]`, `[Child]`, `[Children]`, or `[Resource]` to fields.
+3. If you override `Awake`, call `base.Awake()` before using bound fields.
 
 ```csharp
 using System.Collections.Generic;
@@ -220,50 +393,65 @@ using UTools;
 
 public sealed class InventoryPanel : UBehaviour
 {
-    [Comp] public Canvas Canvas;
-    [Comp] public Button CloseButton;
+    [Comp] private Canvas _canvas;
+    [Comp] private Button _closeButton;
 
-    [Child] public TextMeshProUGUI Title;
-    [Child("Content/Buttons/ConfirmButton")] public Button ConfirmButton;
-    [Child("Content/Icon")] public Image Icon;
-    [Children("Content/Buttons")] public List<Button> ContentButtons;
-    [Children(parentName = "Content/Buttons", includeDecendents = true, includeInactive = false)]
-    public List<GameObject> ActiveButtonNodes;
+    [Child] private TextMeshProUGUI Title;
+    [Child("Content/Buttons/ConfirmButton")] private Button _confirmButton;
+    [Child("Content/Icon")] private Image _icon;
 
-    [Resource("Icons/Inventory")] public Sprite InventorySprite;
+    [Children("Content/Buttons")] private List<Button> _buttons;
+    [Children(parentName = "Content/Buttons", includeDescendants = true, includeInactive = false)]
+    private List<GameObject> _activeButtonNodes;
+
+    [Resource("Icons/Inventory")] private Sprite _inventorySprite;
 
     protected override void Awake()
     {
         base.Awake();
         Title.text = "Inventory";
-        Icon.sprite = InventorySprite;
+        _icon.sprite = _inventorySprite;
     }
 }
 ```
 
-#### UFind Behavior Notes
+### `[Comp]`
 
-- If `[Child]` has no argument, the field name is used.
-- If the field type is `GameObject`, the child object itself is assigned.
-- If the field type is a component, UTools finds the child first, then gets the component from that child.
-- If `[Children]` has no `parentName`, the field name is used to locate the parent object first.
-- Example: `[Children] private List<GameObject> SlotGrid;` means "find a parent GameObject named `SlotGrid`, then collect its children".
-- Example: `[Children("SlotGrid")] private List<Button> ChildButtons;` collects `Button` components from the children under `SlotGrid`.
-- `[Children]` only supports `List<GameObject>` and `List<TComponent>`.
-- `[Children]` defaults to first-level children only and includes inactive children.
-- If `[Children]` targets components, UTools checks each collected child and keeps only the ones that contain that component.
-- Errors are reported per field. One `[Children]` field can log a missing-parent error while another `[Children("...")]` field on the same behaviour still binds successfully.
-- If multiple children share the same name, use a path instead of a simple name.
+- Finds a component on the same GameObject.
+- Works on fields only.
+- Does not overwrite a field that already has a value.
+- Logs a warning if the component is missing.
 
-### UMessage
+### `[Child]`
 
-- Uses `UMessageCenter.Instance`
-- Supports typed `Subscribe<T>()`, `Publish<T>()`, and `Unsubscribe<T>()`
-- Returns `IMessageSubscription` so you can dispose subscriptions cleanly
-- Replays pending messages to the first later subscriber by default
-- Cleans up dead `UnityEngine.Object` subscriber targets automatically
+- With no argument, uses the field name as the child name.
+- With a string argument, uses that name or path.
+- If the field type is `GameObject`, assigns the child object.
+- If the field type is a component, finds the child first, then gets that component from the child.
+- Simple names search descendants case-insensitively.
+- Path lookup uses `Transform.Find` relative to the current transform.
+- If multiple descendants share a simple name, use a path such as `Root/Panel/Button`.
 
-#### UMessage Example: subscribe, replay pending messages, and dispose
+### `[Children]`
+
+- Finds a parent child object, then collects its children into a list.
+- Supports `List<GameObject>` and `List<TComponent>`.
+- With no `parentName`, uses the field name as the parent name.
+- `includeDescendants = false` by default, so only direct children are collected.
+- `includeInactive = true` by default.
+- Component lists keep only child objects that contain the requested component.
+- Errors are reported per field; one failed binding does not stop other fields.
+
+### `[Resource]`
+
+- Loads an asset with `Resources.Load(path, fieldType)`.
+- With no path, uses the field name as the resource path.
+- Do not include the file extension in the path.
+- Keep resources under any Unity `Resources` folder.
+
+## UMessage
+
+`UMessage` is a typed message center.
 
 ```csharp
 using UnityEngine;
@@ -304,30 +492,31 @@ public sealed class ScoreListener : MonoBehaviour
 }
 ```
 
-#### UMessage Example: subscribe without replay
+Usage notes:
+
+- Use `Publish<T>(message)` to send messages.
+- Use `Subscribe<T>(handler)` to listen and keep the returned `IMessageSubscription`.
+- Dispose subscriptions in `OnDisable` or `OnDestroy`.
+- If a message is published before any subscriber exists, it is queued and replayed to the first later subscriber.
+- Use `Subscribe<T>(handler, replayPending: false)` when you do not want old messages.
+- `UMessageCenter.Instance.Clear()` removes all subscribers and pending messages; it is mainly useful for tests or full resets.
+- Exceptions thrown by handlers are logged and do not stop other handlers.
+- Destroyed `UnityEngine.Object` subscriber targets are cleaned up automatically.
 
 ```csharp
-using UTools;
-
 IMessageSubscription subscription = UMessageCenter.Instance.Subscribe<ScoreChangedMessage>(
-    message => UnityEngine.Debug.Log(message.Value),
+    message => Debug.Log(message.Value),
     replayPending: false);
 ```
 
-### UUtils
+## UUtils
 
-`UUtils` is a large extension/helper collection. Common groups include:
+`UUtils` is a collection of small runtime helpers. Import `UTools` and call them as extension/static methods.
 
-- string helpers such as `IsNullOrEmpty()`, `CheckUserName()`, `TrimLength()`
-- time helpers such as `ToTimeString()` and `Tohhmmss()`
-- persistent data helpers such as `ReadFromPersistDataPath()` and `WriteToPersistDataPath()`
-- GameObject helpers such as `FindChild()`, `GetAllDecendents()`, `ToggleAllChildren()`
-- UI and asset helpers such as `ToggleAsCanvasGroup()`, `ToSprite()`, `ToTexture2D()`, `TweenColor()`
-- mesh helpers such as `CloneMesh()`, `CombineMesh()`, `GenerateQuadMesh()`
-
-#### UUtils Example: strings, time, and persistent data
+### Strings and Time
 
 ```csharp
+using System;
 using UnityEngine;
 using UTools;
 
@@ -335,20 +524,39 @@ public sealed class UtilityExample : MonoBehaviour
 {
     private void Start()
     {
-        string name = "player_one";
-        bool isValid = name.CheckUserName();
+        bool validName = "player_one".CheckUserName();
         string shortName = "VeryLongDisplayName".TrimLength(10);
         string timer = 95.ToTimeString();
+        string chineseTimer = TimeSpan.FromSeconds(3661).ToHhMmSsString(useChinese: true);
 
-        UUtils.WriteToPersistDataPath("{\"volume\":0.8}", "user_settings.json");
-        string json = UUtils.ReadFromPersistDataPath("user_settings.json");
-
-        Debug.Log($"valid={isValid}, short={shortName}, timer={timer}, json={json}");
+        Debug.Log($"{validName}, {shortName}, {timer}, {chineseTimer}");
     }
 }
 ```
 
-#### UUtils Example: GameObject and UI helpers
+Common methods:
+
+- `IsNullOrEmpty()`, `IsNotNullOrEmpty()`
+- `CheckUserName()`, `CheckStrChinese()`, `IsIPAddress()`
+- `TrimLength(maxLength)`, `ToBase64String()`
+- `ToTimeString()`, `ToHhMmSsString()`, `TryCalculateTimeSpan(...)`
+
+### Files
+
+```csharp
+using UTools;
+
+UFileUtilities.WriteToPersistentDataPath("{\"volume\":0.8}", "settings/user.json");
+string json = UFileUtilities.ReadFromPersistentDataPath("settings/user.json");
+```
+
+Notes:
+
+- Files are read from and written to `Application.persistentDataPath`.
+- Parent folders are created automatically.
+- `ReadFromPersistentDataPath` creates an empty file by default when it does not exist.
+
+### GameObject and UI
 
 ```csharp
 using UnityEngine;
@@ -365,19 +573,115 @@ public sealed class UiHelperExample : MonoBehaviour
         panelRoot.ToggleAllChildren(true);
         popup.ToggleAsCanvasGroup(true, useTween: false);
 
-        if (closeButton != null)
-        {
-            Debug.Log($"Found child: {closeButton.name}");
-        }
+        closeButton?.ToggleBlink(true);
     }
 }
 ```
 
-### Editor Helpers
+Common methods:
 
-- `ButtonAttribute`
-- `ShowIfAttribute`
-- `AutoComponentAttribute`
+- `FindChild(...)`, `GetAllDescendants()`, `GetDirectChildren()`
+- `ShowOnlyDescendantNamed(...)`, `HideDescendantNamed(...)`
+- `ToggleAllChildren(show)` toggles descendants, not the root itself
+- `EnsureComponent<T>()`, `HasComponent<T>()`, `SetLayerRecursively(...)`
+- `ToggleAsCanvasGroup(...)`, `ToggleAsCanvasGroupAuto(...)`, `TweenColor(...)`, `MoveOutOfScreen(...)`
+
+Notes:
+
+- Most helpers are null-safe and return `null`, empty collections, or `false` when input is invalid.
+- UI tween helpers use a hidden persistent coroutine runner if no runner is provided.
+- Pass your own `MonoBehaviour` runner when you want coroutine lifetime to follow a specific object.
+
+### Textures and Meshes
+
+Common methods:
+
+- `Texture2D.ToSprite()`
+- `Sprite.ToTexture2D()`
+- `Texture.ToTexture2D()`
+- `Texture2D.ToBase64()`
+- `DecodeBase64Image(...)`
+- `CloneMesh(...)`, `CombineMesh(...)`, `GenerateQuadMesh(...)`, `GeneratePolygonMesh(...)`, `GeneratePlane(...)`
+
+Notes:
+
+- Texture conversion creates runtime objects; destroy them when they are no longer needed.
+- Mesh helpers create runtime GameObjects/meshes; manage their lifetime like other generated Unity objects.
+
+## Editor Helpers
+
+### `[Button]`
+
+Creates an Inspector button for a parameterless method.
+
+```csharp
+using UnityEngine;
+using UTools;
+
+public sealed class SpawnDebugTool : MonoBehaviour
+{
+    [Button("Spawn Test Enemy")]
+    private void SpawnTestEnemy()
+    {
+        Debug.Log("Spawned");
+    }
+}
+```
+
+Notes:
+
+- Methods must have no parameters.
+- Public and private instance methods are supported.
+- With multi-object selection, the button invokes the method on every selected target.
+
+### `[ShowIf]`
+
+Shows a serialized field based on another serialized field.
+
+```csharp
+using UnityEngine;
+using UTools;
+
+public sealed class DamageConfig : MonoBehaviour
+{
+    [SerializeField] private bool useCritical;
+
+    [SerializeField, ShowIf(nameof(useCritical))]
+    private float criticalMultiplier = 2f;
+
+    [SerializeField, ShowIf(nameof(useCritical), inverse: false)]
+    private float normalMultiplier = 1f;
+}
+```
+
+Notes:
+
+- By default, the field is shown when the condition is truthy.
+- `inverse: false` shows the field when the condition is falsey.
+- Supported condition types: `bool`, `int`, `float`, `string`, and object reference.
+- Missing or unsupported condition fields are shown and log an error.
+
+### `[AutoComponent]`
+
+Adds or removes required components from the same GameObject through a boolean Inspector toggle.
+
+```csharp
+using UnityEngine;
+using UTools;
+
+public sealed class PhysicsToggle : MonoBehaviour
+{
+    [SerializeField, AutoComponent(typeof(Rigidbody), typeof(Collider))]
+    private bool usePhysics;
+}
+```
+
+Notes:
+
+- The attribute is intended for `bool` fields.
+- Toggling on adds missing components in the editor.
+- Toggling off removes those components in the editor.
+- It does not add or remove components while the game is playing.
 
 ## Tests
 

@@ -1,162 +1,186 @@
-[English](https://github.com/roymina/UTools)
+[English](README.md)
 
 # UTools
 
-UTools 是一个轻量级 Unity 工具集，主要包含四个实用模块：
+UTools 是一个轻量级 Unity 工具集，用来处理依赖注入、UI / 对象查找、消息派发和常用运行时工具方法。
 
-- `UDI`：依赖注入与运行时生命周期管理
-- `UFind`：基于特性的组件、子节点与资源自动绑定
-- `UMessage`：强类型发布 / 订阅消息系统
-- `UUtils`：字符串、文件、UI、网格、纹理、GameObject 等常用工具
+| 模块 | 用途 |
+| --- | --- |
+| `UDI` | 场景 / 全局依赖注入、生命周期回调、异步启动等待 |
+| `UFind` | 基于特性的组件、子节点、子节点列表和 `Resources` 自动绑定 |
+| `UMessage` | 强类型发布 / 订阅消息，支持可释放订阅 |
+| `UUtils` | 字符串、时间、文件、GameObject、UI、纹理、网格等工具 |
+| Editor 辅助 | Inspector 按钮、条件显示字段、组件自动增删等小工具 |
 
 ## 安装方式
 
 ### Git URL / UPM
 
-在 `Package Manager` 中选择 `Add package from git URL...`，填入：
+打开 `Window > Package Manager`，选择 `Add package from git URL...`，填入：
 
-`https://github.com/roymina/UTools.git?path=/Assets/UTools`
+```text
+https://github.com/roymina/UTools.git?path=/Assets/UTools
+```
 
-仓库本身仍然保持为普通 Unity 工程，而 `Assets/UTools` 对外作为可安装的包根目录。
+这个仓库本身仍然是普通 Unity 工程，`Assets/UTools` 对外作为 UPM 包根目录。
 
-`TextMeshPro` 会通过 Unity 官方包依赖 `com.unity.textmeshpro` 自动引入。  
-如果导入示例后出现 TMP 资源缺失，请执行一次：
+`TextMeshPro` 会通过 `com.unity.textmeshpro` 引入。  
+如果示例 UI 缺少 TMP 资源，执行一次：
 
-`Window > TextMeshPro > Import TMP Essential Resources`
+```text
+Window > TextMeshPro > Import TMP Essential Resources
+```
 
 ### `unitypackage`
 
-如果你更偏好手动导入，也可以直接使用 `Releases/` 目录中的发布文件。
+如果你更喜欢手动导入，可以使用 `Releases/` 目录中的发布文件。
 
-## 模块说明
+## 快速开始
 
-### UDI
-
-- 使用 `UDIContext` 作为依赖注入入口
-- 通过 `[Inject]` 支持字段、属性、方法注入
-- 通过 `[PostInjection]` 支持注入完成后的回调
-- 支持 `IInitializable`、`IAsyncInitializable`、`ITickable`、`ILateTickable`、`IFixedTickable`、`IUDisposable`、`IPausable`
-- 支持 `AsSingle()`、`AsTransient()`、`InScope(...)`、`FromInstance(...)`、`FromGameObject(...)`、`AsGlobal()`、`RequiredForContextStart()`、`NonLazy()`
-- 支持通过 `UGameObjectFactory` 对运行时实例化对象进行注入
-
-说明：
-
-- 当前不支持构造函数注入
-- 当前没有 `UDIInstallerBase`
-- 推荐使用 `MonoInstaller` 与 `ScriptableObjectInstaller`
-- `GlobalInstaller` 资源需放在 `Resources` 目录下，才能启用跨场景全局注入
-- 场景级本地注入要求场景中显式且唯一地放置一个 `UDIContext`
-- 推荐把 `UDIContext` 与 `MonoInstaller` 放在单独的 Bootstrap 物体上，业务消费者可位于场景任意层级
-- 如果场景里出现多个 `UDIContext`，初始化会直接报错，而不是做部分注入
-- 当上下文依赖耗时初始化服务时，推荐使用 `AsyncWaitRoot` 明确指定需要等待的子树；其余场景对象会立即注入并继续运行
-
-#### UDI 示例：注册服务并启动场景 Context
+1. 安装包。
+2. 在场景里创建一个 `Bootstrap` 物体，并添加唯一的 `UDIContext`。
+3. 在同一个 `Bootstrap` 物体上添加 `MonoInstaller`，或把 installer 拖进 `UDIContext` 的列表。
+4. 在 `InstallBindings` 中注册服务。
+5. 在场景组件上使用 `[Inject]`，运行时 Prefab 使用 `UGameObjectFactory` 实例化。
 
 ```csharp
 using UnityEngine;
 using UTools;
 
-public interface ILogger
+public interface IGameClock
 {
-    void Log(string message);
+    float Time { get; }
 }
 
-public sealed class UnityLogger : ILogger
+public sealed class UnityGameClock : IGameClock
 {
-    public void Log(string message)
-    {
-        Debug.Log(message);
-    }
+    public float Time => UnityEngine.Time.time;
 }
 
 public sealed class GameInstaller : MonoInstaller
 {
+    public override void InstallBindings(UDIContainer container)
+    {
+        container.Bind<IGameClock>()
+            .To<UnityGameClock>()
+            .AsSingle();
+    }
+}
+
+public sealed class ClockLabel : MonoBehaviour
+{
+    [Inject] private IGameClock _clock;
+
+    private void Start()
+    {
+        Debug.Log($"Injected time: {_clock.Time}");
+    }
+}
+```
+
+## UDI
+
+`UDI` 是依赖注入模块。它负责准备服务、注入场景对象、注入运行时 Prefab，并把生命周期接口交给同一个 Context 管理。
+
+### 三种 Installer
+
+- `GlobalInstaller`：给**整个游戏**准备“全局兜底服务”。
+- `MonoInstaller`：给**当前场景**准备“场景专属服务”。
+- `ScriptableObjectInstaller`：给**当前场景**准备“可复用的资产型配置 / 服务”。
+
+### `UDIContext`
+
+`UDIContext` 是场景注入入口，推荐这样摆：
+
+1. 创建一个专用 `Bootstrap` GameObject。
+2. 添加 `UDIContext`。
+3. 把 `MonoInstaller` 挂在同一个 GameObject 上，或拖到 `UDIContext` > `Installers`。
+4. 把 `ScriptableObjectInstaller` 资产拖到 `UDIContext` > `Scriptable Object Installers`。
+5. 如果有绑定使用 `.RequiredForContextStart()`，给 `UDIContext` 指定 `Async Wait Root`。
+
+注意事项：
+
+- 一个场景里保持唯一的 `UDIContext`，多个 Context 会直接初始化失败。
+- `UDIContext` 和启动 installer 建议放在专用 `Bootstrap` 物体上，业务消费者可以放在场景任意位置。
+- `MonoInstaller` 只有两种情况下会参与当前 Context：挂在 `UDIContext` 同一个物体上，或被显式拖进 `Installers` 列表。
+- 单独放一个 `MonoInstaller` 且场景没有 Context 时，它可以自动补一个 Context，但正式场景建议显式配置。
+- `UDIContext.IsReady` 表示启动是否完成；必须手动等待时可以 await `ReadyTask`。
+- 初始化异常会记录到 `InitializationException`，Context 会保持未就绪。
+
+### `MonoInstaller`
+
+当绑定需要场景引用时使用 `MonoInstaller`，例如 Transform、Prefab、Camera、场景组件。
+
+```csharp
+using UnityEngine;
+using UTools;
+
+public sealed class GameplayInstaller : MonoInstaller
+{
     [SerializeField] private Transform spawnRoot;
+    [SerializeField] private EnemyView enemyPrefab;
 
     public override void InstallBindings(UDIContainer container)
     {
-        container.Bind<ILogger>()
-            .To<UnityLogger>()
-            .AsSingle();
-
         container.Bind<Transform>()
             .FromInstance(spawnRoot)
             .AsSingle();
 
-        container.Bind<GameManager>()
+        container.Bind<EnemyService>()
             .ToSelf()
             .AsSingle()
             .NonLazy();
+
+        container.Bind<IFactory<EnemyView>>()
+            .FromInstance(new PrefabFactory<EnemyView>(enemyPrefab, container, spawnRoot))
+            .AsSingle();
     }
 }
 ```
 
-#### UDI 示例：字段、属性、方法与注入后回调
+注意事项：
+
+- `.NonLazy()` 会立刻创建 / finalize 当前绑定，建议永远放在链式调用最后。
+- 序列化拖拽进来的场景引用优先用 `.FromInstance(...)`。
+- `MonoBehaviour` 绑定需要指定物体时，用 `.FromGameObject(host)`。
+- `FromGameObject` 会优先复用 Unity 已经找到的同类型实例，找不到时才会在目标物体上获取或添加组件。
+
+### `ScriptableObjectInstaller`
+
+当一组绑定需要被多个场景复用时，使用 `ScriptableObjectInstaller`。
 
 ```csharp
 using UnityEngine;
 using UTools;
 
-public sealed class GameManager : IInitializable, ITickable
+[CreateAssetMenu(menuName = "Game/Installers/Audio Installer")]
+public sealed class AudioInstaller : ScriptableObjectInstaller
 {
-    [Inject] private ILogger _logger;
+    [SerializeField] private AudioSettings settings;
 
-    [Inject]
-    public Transform SpawnRoot { get; private set; }
-
-    private Camera _mainCamera;
-
-    [Inject]
-    private void Construct(Camera mainCamera)
+    public override void InstallBindings(UDIContainer container)
     {
-        _mainCamera = mainCamera;
-    }
+        container.Bind<AudioSettings>()
+            .FromInstance(settings)
+            .AsSingle();
 
-    public void Initialize()
-    {
-        _logger.Log("GameManager initialized");
-    }
-
-    [PostInjection]
-    private void AfterInject()
-    {
-        _logger.Log($"Spawn root: {SpawnRoot.name}, camera: {_mainCamera.name}");
-    }
-
-    public void Tick()
-    {
+        container.Bind<AudioService>()
+            .ToSelf()
+            .AsSingle();
     }
 }
 ```
 
-#### UDI 示例：实例化 Prefab 并自动注入
+使用方式：
 
-```csharp
-using UnityEngine;
-using UTools;
+- 通过 Unity 的 `Create` 菜单创建 installer 资产。
+- 把资产拖到 `UDIContext` > `Scriptable Object Installers`。
+- 只有拖进这个列表的 installer 资产才会参与当前场景的绑定。
+- 场景对象引用放在 `MonoInstaller`，可复用配置和数据放在 `ScriptableObjectInstaller`。
 
-public sealed class EnemySpawner : MonoBehaviour
-{
-    [SerializeField] private GameObject enemyPrefab;
-    [SerializeField] private Transform spawnPoint;
+### `GlobalInstaller`
 
-    public void Spawn()
-    {
-        UGameObjectFactory.InstantiateWithDependency(
-            enemyPrefab,
-            spawnPoint.position,
-            spawnPoint.rotation);
-    }
-}
-```
-#### UDI 全局注入使用方式
-
-- 在 `Resources` 目录下创建一个 `GlobalInstaller` 资源
-- 在 `GlobalInstaller` 中注册少量跨场景常驻服务，并使用 `.AsGlobal()`
-- 没有 `UDIContext` 的场景也可以直接注入这些全局服务
-- 如果某个场景根对象上挂了普通 `UDIContext`，则该本地上下文中的绑定优先于全局绑定
-- 
-#### UDI 示例：注册跨场景全局服务
+当服务需要跨场景兜底时，使用 `GlobalInstaller`。
 
 ```csharp
 using UnityEngine;
@@ -175,19 +199,101 @@ public sealed class GameGlobalInstaller : GlobalInstaller
 }
 ```
 
-#### UDI 异步初始化使用方式
+使用方式：
 
-- 对于必须先加载完成的数据 / 服务，实现 `IAsyncInitializable`
-- 对应绑定增加 `.RequiredForContextStart()`
-- 在 `UDIContext` 上指定 `AsyncWaitRoot`
-- `AsyncWaitRoot` 会在 Required 异步服务初始化成功后才被注入；如果原本是激活状态，初始化后会恢复激活
-- 当场景使用唯一 `UDIContext` 时，其它已激活的场景根对象也会在初始化完成前保持暂停
-- `AsyncWaitRoot` 之外的对象会立即注入并继续运行，但不应假设 Required 异步服务已完成初始化
-- 如果场景存在 Required 异步服务但没有配置 `AsyncWaitRoot`，Context 会直接报错并中止初始化
-- 如果初始化失败，Context 会保持未就绪状态，`AsyncWaitRoot` 也不会被激活
+- 创建且只创建一个 `GlobalInstaller` 资产。
+- 把资产放在 `Resources` 目录下，例如 `Assets/Resources/GameGlobalInstaller.asset`。
+- `.AsGlobal()` 只能在 `GlobalInstaller` 里使用。
+- 没有 `UDIContext` 的场景也能注入全局服务。
+- 有唯一 `UDIContext` 的场景会优先使用本地绑定，找不到时再回退到全局绑定。
+- 不要在 `Resources` 下放多个 `GlobalInstaller` 资产，当前全局运行时只支持一个。
 
+### 绑定 API
 
-#### UDI 示例：等待异步服务就绪后再启动场景内容
+| API | 用途 |
+| --- | --- |
+| `Bind<T>()` | 把 `T` 同时作为契约类型和实现类型注册 |
+| `Bind<TContract, TImplementation>()` | 把接口 / 基类注册到具体实现 |
+| `.To<T>()` | 指定具体实现类型 |
+| `.ToSelf()` | 使用契约类型本身作为实现类型 |
+| `.AsSingle()` | 当前容器内复用同一个实例 |
+| `.AsTransient()` | 每次 Resolve 都创建新实例 |
+| `.InScope(BindingScope.Scoped)` | 在当前 Context / 容器内缓存一个实例 |
+| `.FromInstance(instance)` | 使用已有实例，常用于序列化引用 |
+| `.FromGameObject(gameObject)` | 在指定 GameObject 上解析或添加 `MonoBehaviour` |
+| `.NonLazy()` | Context 启动时立即创建实例 |
+| `.RequiredForContextStart()` | 让该绑定在异步启动门槛完成前必须就绪 |
+| `.AsGlobal()` | 标记全局绑定，只能用于 `GlobalInstaller` |
+
+注意事项：
+
+- 当前不支持构造函数注入。
+- 具体非抽象类如果没有显式绑定，UDI 可以用无参构造自动创建。
+- 接口、抽象类和关键服务建议显式绑定。
+- 循环依赖会直接抛错，不会做部分注入。
+
+### 注入写法
+
+`[Inject]` 可以标在字段、可写属性和方法上，私有成员也支持。
+
+```csharp
+using UnityEngine;
+using UTools;
+
+public sealed class PlayerPresenter : MonoBehaviour
+{
+    [Inject] private IGameClock _clock;
+
+    [Inject]
+    public Transform SpawnRoot { get; private set; }
+
+    private Camera _camera;
+
+    [Inject]
+    private void Construct(Camera camera)
+    {
+        _camera = camera;
+    }
+
+    [PostInjection]
+    private void AfterInject()
+    {
+        Debug.Log($"Clock={_clock.Time}, Root={SpawnRoot.name}, Camera={_camera.name}");
+    }
+}
+```
+
+注意事项：
+
+- 注入顺序是字段、属性、方法、`[PostInjection]`。
+- `[Inject]` 方法可以带参数，每个参数都会从容器 Resolve。
+- `[PostInjection]` 在依赖赋值完成后执行，也可以带可解析参数。
+- 场景对象由 `UDIContext` 注入；运行时 Prefab 用 `UGameObjectFactory` 或 `PrefabFactory<T>` 创建。
+- `UDIContext` 默认执行顺序很早；不要把消费者脚本设置到比 `UDIContext` 更早执行。
+
+### 生命周期接口
+
+服务或被注入对象实现这些接口后，会被 `LifecycleManager` 管理。
+
+| 接口 | 触发时机 |
+| --- | --- |
+| `IInitializable.Initialize()` | Context 注入完成后 |
+| `IAsyncInitializable.InitializeAsync(...)` | 只有绑定标记 `.RequiredForContextStart()` 时才会等待 |
+| `ITickable.Tick()` | 未暂停时每帧 `Update` |
+| `IFixedTickable.FixedTick()` | 未暂停时每次 `FixedUpdate` |
+| `ILateTickable.LateTick()` | 未暂停时每帧 `LateUpdate` |
+| `IUDisposable.Dispose()` | `LifecycleManager` 销毁时 |
+| `IPausable.Pause()` / `Resume()` | 手动调用 `LifecycleManager.Pause()` / `Resume()` 时 |
+
+注意事项：
+
+- 如果 `UDIContext` 物体上没有 `LifecycleManager`，会自动添加。
+- 非 Lazy 或已 Resolve 的实例只会被跟踪一次。
+- `IAsyncInitializable` 不会自动等待，必须把绑定标记为 `.RequiredForContextStart()`。
+
+### 异步注入和等待
+
+当某个场景子树必须等远程配置、存档、资源清单等异步服务完成后再激活时，使用这个流程。
 
 ```csharp
 using System.Threading;
@@ -195,39 +301,86 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UTools;
 
-public sealed class AsyncConfigInstaller : MonoInstaller
+public sealed class RemoteConfigService : IAsyncInitializable
 {
-    [SerializeField] private ConfigService configService;
+    public async Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await Task.Delay(3000, cancellationToken);
+    }
+}
 
+public sealed class GameInstaller : MonoInstaller
+{
     public override void InstallBindings(UDIContainer container)
     {
-        container.Bind<ConfigService>()
-            .FromInstance(configService)
+        container.Bind<RemoteConfigService>()
+            .ToSelf()
             .AsSingle()
             .RequiredForContextStart();
     }
 }
+```
 
-public sealed class ConfigService : IAsyncInitializable
+这样注册服务后：
+
+- 在 `UDIContext` 上指定 `Async Wait Root`。
+- 场景开始时，如果 `Async Wait Root` 原本是激活状态，它会先被设为失活。
+- 所有 Required 异步服务会按绑定注册顺序依次初始化。
+- 异步服务全部完成后，UDI 会注入 `Async Wait Root` 子树，然后恢复它原来的激活状态。
+- `Async Wait Root` 外面的对象会立即注入并继续运行。
+
+注意事项：
+
+- 需要等待异步服务的 gameplay 节点都放到 `Async Wait Root` 下。
+- 不要把 `UDIContext` 所在物体放进 `Async Wait Root`。
+- `Async Wait Root` 必须属于同一个场景。
+- 存在 Required 异步绑定但没有指定 `Async Wait Root` 时，Context 会初始化失败。
+- 如果 `Async Wait Root` 启动前就是失活状态，异步完成后仍保持失活，但依然会完成注入。
+- 如果异步初始化失败或被取消，Context 会保持未就绪，等待根节点不会被恢复。
+
+### 运行时 Prefab 注入
+
+包含 `[Inject]` 消费者的 Prefab，不要直接用 `Object.Instantiate`，改用 `UGameObjectFactory`。
+
+```csharp
+using UnityEngine;
+using UTools;
+
+public sealed class EnemySpawner : MonoBehaviour
 {
-    public Task InitializeAsync(CancellationToken cancellationToken)
+    [SerializeField] private GameObject enemyPrefab;
+    [SerializeField] private Transform spawnRoot;
+
+    public GameObject Spawn(Vector3 position)
     {
-        return Task.CompletedTask;
+        return UGameObjectFactory.InstantiateWithDependency(
+            enemyPrefab,
+            position,
+            Quaternion.identity,
+            spawnRoot);
     }
 }
 ```
 
-### UFind
+注意事项：
 
-- `[Comp]` 绑定当前 GameObject 上的组件
-- `[Child]` 绑定子节点或子节点上的组件
-- `[Child("Root/Panel/Button")]` 支持路径查找
-- `[Resource]` 自动从 `Resources` 加载资源
-- `UBehaviour` 会缓存反射信息，减少重复扫描
+- 如果实例需要使用最近的父级 Context，优先使用带 `Transform parent` 的重载。
+- 工厂会注入新实例 GameObject 子树上的所有 `MonoBehaviour`。
+- 如果找不到 Context，工厂会退回全局 / 默认容器并输出警告。
 
-#### UFind 示例：自动绑定本地组件、子节点和资源
+## UFind
+
+`UFind` 用来减少重复的 `GetComponent`、`transform.Find` 和 `Resources.Load` 代码。
+
+### 基本使用
+
+1. 脚本继承 `UBehaviour`。
+2. 在字段上添加 `[Comp]`、`[Child]`、`[Children]` 或 `[Resource]`。
+3. 如果重写 `Awake`，先调用 `base.Awake()`，再使用绑定字段。
 
 ```csharp
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -235,40 +388,65 @@ using UTools;
 
 public sealed class InventoryPanel : UBehaviour
 {
-    [Comp] public Canvas Canvas;
-    [Comp] public Button CloseButton;
+    [Comp] private Canvas _canvas;
+    [Comp] private Button _closeButton;
 
-    [Child] public TextMeshProUGUI Title;
-    [Child("Content/Buttons/ConfirmButton")] public Button ConfirmButton;
-    [Child("Content/Icon")] public Image Icon;
+    [Child] private TextMeshProUGUI Title;
+    [Child("Content/Buttons/ConfirmButton")] private Button _confirmButton;
+    [Child("Content/Icon")] private Image _icon;
 
-    [Resource("Icons/Inventory")] public Sprite InventorySprite;
+    [Children("Content/Buttons")] private List<Button> _buttons;
+    [Children(parentName = "Content/Buttons", includeDescendants = true, includeInactive = false)]
+    private List<GameObject> _activeButtonNodes;
+
+    [Resource("Icons/Inventory")] private Sprite _inventorySprite;
 
     protected override void Awake()
     {
         base.Awake();
         Title.text = "Inventory";
-        Icon.sprite = InventorySprite;
+        _icon.sprite = _inventorySprite;
     }
 }
 ```
 
-#### UFind 行为说明
+### `[Comp]`
 
-- `[Child]` 不传参数时，默认使用字段名查找
-- 如果字段类型是 `GameObject`，会直接赋值子节点对象本身
-- 如果字段类型是组件，会先找到子节点，再从该节点上获取组件
-- 如果有多个同名子节点，建议使用路径写法
+- 查找当前 GameObject 上的组件。
+- 只支持字段。
+- 字段已有值时不会覆盖。
+- 找不到组件时输出 warning。
 
-### UMessage
+### `[Child]`
 
-- 使用 `UMessageCenter.Instance`
-- 支持强类型 `Subscribe<T>()`、`Publish<T>()`、`Unsubscribe<T>()`
-- `Subscribe` 返回 `IMessageSubscription`，便于在 `OnDisable` 中释放
-- 默认支持“先发布、后订阅”的待处理消息回放
-- 会自动清理已经销毁的 `UnityEngine.Object` 订阅目标
+- 不传参数时，使用字段名作为子节点名。
+- 传字符串时，使用指定名称或路径。
+- 字段类型是 `GameObject` 时，赋值子节点对象本身。
+- 字段类型是组件时，先找到子节点，再从该子节点上取组件。
+- 简单名称会在所有后代中忽略大小写查找。
+- 路径查找使用相对当前 transform 的 `Transform.Find`。
+- 如果多个后代重名，使用 `Root/Panel/Button` 这类路径写法。
 
-#### UMessage 示例：订阅、接收回放并释放订阅
+### `[Children]`
+
+- 先找到一个父级子节点，再把它的 children 收集成列表。
+- 支持 `List<GameObject>` 和 `List<TComponent>`。
+- 不指定 `parentName` 时，使用字段名作为父级子节点名。
+- 默认 `includeDescendants = false`，只收集第一层子节点。
+- 默认 `includeInactive = true`，会包含失活子节点。
+- 组件列表只保留带有目标组件的子节点。
+- 错误按字段输出；一个字段绑定失败不会影响其它字段继续绑定。
+
+### `[Resource]`
+
+- 使用 `Resources.Load(path, fieldType)` 加载资源。
+- 不传路径时，使用字段名作为资源路径。
+- 路径不要写文件扩展名。
+- 资源必须放在 Unity 的任意 `Resources` 目录下。
+
+## UMessage
+
+`UMessage` 是强类型消息中心。
 
 ```csharp
 using UnityEngine;
@@ -309,30 +487,31 @@ public sealed class ScoreListener : MonoBehaviour
 }
 ```
 
-#### UMessage 示例：关闭待处理消息回放
+使用注意：
+
+- 用 `Publish<T>(message)` 发布消息。
+- 用 `Subscribe<T>(handler)` 订阅消息，并保存返回的 `IMessageSubscription`。
+- 在 `OnDisable` 或 `OnDestroy` 中释放订阅。
+- 如果消息发布时还没有订阅者，它会进入待处理队列，并回放给第一个后续订阅者。
+- 不想接收旧消息时使用 `Subscribe<T>(handler, replayPending: false)`。
+- `UMessageCenter.Instance.Clear()` 会清空所有订阅和待处理消息，主要用于测试或完整重置。
+- handler 抛异常会被记录，不会阻断其它 handler。
+- 已销毁的 `UnityEngine.Object` 订阅目标会自动清理。
 
 ```csharp
-using UTools;
-
 IMessageSubscription subscription = UMessageCenter.Instance.Subscribe<ScoreChangedMessage>(
-    message => UnityEngine.Debug.Log(message.Value),
+    message => Debug.Log(message.Value),
     replayPending: false);
 ```
 
-### UUtils
+## UUtils
 
-`UUtils` 包含大量扩展与工具方法，常见类别包括：
+`UUtils` 是一组小型运行时工具。引入 `UTools` 命名空间后，按扩展方法或静态方法使用。
 
-- 字符串辅助：`IsNullOrEmpty()`、`CheckUserName()`、`TrimLength()`
-- 时间辅助：`ToTimeString()`、`Tohhmmss()`
-- 持久化读写：`ReadFromPersistDataPath()`、`WriteToPersistDataPath()`
-- GameObject 操作：`FindChild()`、`GetAllDecendents()`、`ToggleAllChildren()`
-- UI 与资源辅助：`ToggleAsCanvasGroup()`、`ToSprite()`、`ToTexture2D()`、`TweenColor()`
-- 网格辅助：`CloneMesh()`、`CombineMesh()`、`GenerateQuadMesh()`
-
-#### UUtils 示例：字符串、时间和持久化读写
+### 字符串与时间
 
 ```csharp
+using System;
 using UnityEngine;
 using UTools;
 
@@ -340,20 +519,39 @@ public sealed class UtilityExample : MonoBehaviour
 {
     private void Start()
     {
-        string name = "player_one";
-        bool isValid = name.CheckUserName();
+        bool validName = "player_one".CheckUserName();
         string shortName = "VeryLongDisplayName".TrimLength(10);
         string timer = 95.ToTimeString();
+        string chineseTimer = TimeSpan.FromSeconds(3661).ToHhMmSsString(useChinese: true);
 
-        UUtils.WriteToPersistDataPath("{\"volume\":0.8}", "user_settings.json");
-        string json = UUtils.ReadFromPersistDataPath("user_settings.json");
-
-        Debug.Log($"valid={isValid}, short={shortName}, timer={timer}, json={json}");
+        Debug.Log($"{validName}, {shortName}, {timer}, {chineseTimer}");
     }
 }
 ```
 
-#### UUtils 示例：GameObject 与 UI 辅助
+常用方法：
+
+- `IsNullOrEmpty()`、`IsNotNullOrEmpty()`
+- `CheckUserName()`、`CheckStrChinese()`、`IsIPAddress()`
+- `TrimLength(maxLength)`、`ToBase64String()`
+- `ToTimeString()`、`ToHhMmSsString()`、`TryCalculateTimeSpan(...)`
+
+### 文件读写
+
+```csharp
+using UTools;
+
+UFileUtilities.WriteToPersistentDataPath("{\"volume\":0.8}", "settings/user.json");
+string json = UFileUtilities.ReadFromPersistentDataPath("settings/user.json");
+```
+
+注意事项：
+
+- 文件会读写到 `Application.persistentDataPath`。
+- 父目录会自动创建。
+- `ReadFromPersistentDataPath` 默认会在文件不存在时创建空文件。
+
+### GameObject 与 UI
 
 ```csharp
 using UnityEngine;
@@ -370,23 +568,119 @@ public sealed class UiHelperExample : MonoBehaviour
         panelRoot.ToggleAllChildren(true);
         popup.ToggleAsCanvasGroup(true, useTween: false);
 
-        if (closeButton != null)
-        {
-            Debug.Log($"Found child: {closeButton.name}");
-        }
+        closeButton?.ToggleBlink(true);
     }
 }
 ```
 
-### Editor 辅助
+常用方法：
 
-- `ButtonAttribute`
-- `ShowIfAttribute`
-- `AutoComponentAttribute`
+- `FindChild(...)`、`GetAllDescendants()`、`GetDirectChildren()`
+- `ShowOnlyDescendantNamed(...)`、`HideDescendantNamed(...)`
+- `ToggleAllChildren(show)` 会切换所有后代，不会切换根物体自身
+- `EnsureComponent<T>()`、`HasComponent<T>()`、`SetLayerRecursively(...)`
+- `ToggleAsCanvasGroup(...)`、`ToggleAsCanvasGroupAuto(...)`、`TweenColor(...)`、`MoveOutOfScreen(...)`
+
+注意事项：
+
+- 大多数工具方法是 null-safe 的，输入无效时返回 `null`、空集合或 `false`。
+- UI tween 没传 runner 时，会创建一个隐藏的常驻协程 runner。
+- 如果希望协程生命周期跟随某个对象，请传入自己的 `MonoBehaviour` runner。
+
+### 纹理与网格
+
+常用方法：
+
+- `Texture2D.ToSprite()`
+- `Sprite.ToTexture2D()`
+- `Texture.ToTexture2D()`
+- `Texture2D.ToBase64()`
+- `DecodeBase64Image(...)`
+- `CloneMesh(...)`、`CombineMesh(...)`、`GenerateQuadMesh(...)`、`GeneratePolygonMesh(...)`、`GeneratePlane(...)`
+
+注意事项：
+
+- 纹理转换会创建运行时对象，不再需要时要自行销毁。
+- 网格工具会创建运行时 GameObject / Mesh，请按普通生成物生命周期管理。
+
+## Editor 辅助
+
+### `[Button]`
+
+给无参方法生成一个 Inspector 按钮。
+
+```csharp
+using UnityEngine;
+using UTools;
+
+public sealed class SpawnDebugTool : MonoBehaviour
+{
+    [Button("Spawn Test Enemy")]
+    private void SpawnTestEnemy()
+    {
+        Debug.Log("Spawned");
+    }
+}
+```
+
+注意事项：
+
+- 方法必须无参数。
+- 支持 public / private 实例方法。
+- 多选对象时，按钮会对每个选中的目标执行一次。
+
+### `[ShowIf]`
+
+根据另一个序列化字段决定当前字段是否显示。
+
+```csharp
+using UnityEngine;
+using UTools;
+
+public sealed class DamageConfig : MonoBehaviour
+{
+    [SerializeField] private bool useCritical;
+
+    [SerializeField, ShowIf(nameof(useCritical))]
+    private float criticalMultiplier = 2f;
+
+    [SerializeField, ShowIf(nameof(useCritical), inverse: false)]
+    private float normalMultiplier = 1f;
+}
+```
+
+注意事项：
+
+- 默认在条件字段为真时显示。
+- `inverse: false` 表示在条件字段为假时显示。
+- 支持的条件字段类型：`bool`、`int`、`float`、`string`、对象引用。
+- 条件字段缺失或类型不支持时，会显示该字段并输出错误。
+
+### `[AutoComponent]`
+
+通过一个 bool 开关，在 Inspector 中给同一个 GameObject 添加或删除指定组件。
+
+```csharp
+using UnityEngine;
+using UTools;
+
+public sealed class PhysicsToggle : MonoBehaviour
+{
+    [SerializeField, AutoComponent(typeof(Rigidbody), typeof(Collider))]
+    private bool usePhysics;
+}
+```
+
+注意事项：
+
+- 这个特性主要用于 `bool` 字段。
+- 编辑器中勾选时，会补齐缺失组件。
+- 编辑器中取消勾选时，会删除这些组件。
+- 运行时不会添加或删除组件。
 
 ## 测试
 
-项目已经包含 Unity Test Framework 测试入口：
+项目包含 Unity Test Framework 测试入口：
 
 - `Assets/UTools/Tests/EditMode`
 - `Assets/UTools/Tests/PlayMode`
