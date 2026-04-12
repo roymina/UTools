@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0
+- Stabilized `UDI` scene startup with global fallback injection and `AsyncWaitRoot` subtree gating for required async services.
+- Added `UFind` `[Children]` binding for collecting child GameObjects or component lists from a named parent.
+- Refactored `UUtils` into clearer focused utility classes while keeping the same Unity-oriented helper surface.
+- Polished the root documentation and usage guides for `UDI`, `UFind`, `UMessage`, `UUtils`, and editor helpers.
+
 ## 0.5.1
 - Restored the Unity project layout so example scenes continue to run from `Assets/UTools/Example`.
 - Kept Git URL installation support by exposing `Assets/UTools` as the package root with `?path=/Assets/UTools`.

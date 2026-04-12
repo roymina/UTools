@@ -4,7 +4,7 @@
 
 ![Unity](https://img.shields.io/badge/Unity-2023.2%2B-000000?logo=unity&logoColor=white)
 ![UPM](https://img.shields.io/badge/UPM-Git%20URL-blue)
-![Version](https://img.shields.io/badge/version-0.5.1-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![C#](https://img.shields.io/badge/C%23-Unity-239120?logo=csharp&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-EditMode%20%7C%20PlayMode-brightgreen)
 
