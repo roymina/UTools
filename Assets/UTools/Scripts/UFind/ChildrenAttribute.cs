@@ -16,7 +16,7 @@ namespace UTools
     public class ChildrenAttribute : Attribute
     {
         public string parentName;
-        public bool includeDecendents = false;
+        public bool includeDescendants = false;
         public bool includeInactive = true;
 
         public ChildrenAttribute()

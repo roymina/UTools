@@ -92,7 +92,7 @@ namespace UTools
 
             if (children == null || children.Length == 0)
             {
-                children = UUtils.GetAllDecendents(gameObject);
+                children = gameObject.GetAllDescendants();
             }
 
             foreach (FieldInfo field in fields)
@@ -138,7 +138,7 @@ namespace UTools
 
             if (children == null || children.Length == 0)
             {
-                children = UUtils.GetAllDecendents(gameObject);
+                children = gameObject.GetAllDescendants();
             }
 
             foreach (FieldInfo field in fields)
@@ -163,7 +163,7 @@ namespace UTools
                     continue;
                 }
 
-                IEnumerable<GameObject> targets = EnumerateChildren(parent, childrenAttr.includeDecendents, childrenAttr.includeInactive);
+                IEnumerable<GameObject> targets = EnumerateChildren(parent, childrenAttr.includeDescendants, childrenAttr.includeInactive);
                 if (elementType == typeof(GameObject))
                 {
                     foreach (GameObject target in targets)
@@ -228,11 +228,11 @@ namespace UTools
             return true;
         }
 
-        private static IEnumerable<GameObject> EnumerateChildren(GameObject parent, bool includeDecendents, bool includeInactive)
+        private static IEnumerable<GameObject> EnumerateChildren(GameObject parent, bool includeDescendants, bool includeInactive)
         {
-            IEnumerable<GameObject> targets = includeDecendents
-                ? parent.GetAllDecendents()
-                : parent.transform.Cast<Transform>().Select(child => child.gameObject);
+            IEnumerable<GameObject> targets = includeDescendants
+                ? parent.GetAllDescendants()
+                : parent.GetDirectChildren();
 
             if (!includeInactive)
             {

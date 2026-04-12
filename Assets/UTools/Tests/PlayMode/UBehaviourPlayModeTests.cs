@@ -45,8 +45,8 @@ namespace UTools.Tests
             Assert.That(behaviour.NamedChildren[1].name, Is.EqualTo("InactiveChild"));
             Assert.That(behaviour.NamedChildren[2].name, Is.EqualTo("NestedParent"));
 
-            Assert.That(behaviour.NamedDescendents, Has.Count.EqualTo(4));
-            Assert.That(behaviour.NamedDescendents.Exists(child => child.name == "Grandchild"), Is.True);
+            Assert.That(behaviour.NamedDescendants, Has.Count.EqualTo(4));
+            Assert.That(behaviour.NamedDescendants.Exists(child => child.name == "Grandchild"), Is.True);
 
             Assert.That(behaviour.ActiveOnlyChildren, Has.Count.EqualTo(2));
             Assert.That(behaviour.ActiveOnlyChildren.Exists(child => child.name == "InactiveChild"), Is.False);
@@ -118,8 +118,8 @@ namespace UTools.Tests
             [Children("NamedParent")]
             public List<GameObject> NamedChildren;
 
-            [Children("NamedParent", includeDecendents = true)]
-            public List<GameObject> NamedDescendents;
+            [Children("NamedParent", includeDescendants = true)]
+            public List<GameObject> NamedDescendants;
 
             [Children("NamedParent", includeInactive = false)]
             public List<GameObject> ActiveOnlyChildren;

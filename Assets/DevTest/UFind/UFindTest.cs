@@ -12,7 +12,7 @@ public class UFindTest : UBehaviour
     [Child] private GameObject DisabledContainer;
     [Child] Light LightProbe;
     [Resource("Prefabs/Sphere")] GameObject SpherePrefab;
-    [Children(includeDecendents = true)] private List<GameObject> SlotGrid;
+    [Children(includeDescendants = true)] private List<GameObject> SlotGrid;
     [Children("SlotGrid")] private List<Button> childButtons;
 
     private
