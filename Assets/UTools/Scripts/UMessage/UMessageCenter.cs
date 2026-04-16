@@ -74,7 +74,7 @@ namespace UTools
             }
         }
 
-        public void Publish<T>(T message)
+        public void Publish<T>(T message, bool cacheIfNoSubscribers = true)
         {
             Action<T>[] handlers;
 
@@ -84,7 +84,11 @@ namespace UTools
                 collection.CleanupDeadSubscribers();
                 if (!collection.HasSubscribers)
                 {
-                    collection.Enqueue(message);
+                    if (cacheIfNoSubscribers)
+                    {
+                        collection.Enqueue(message);
+                    }
+
                     return;
                 }
 

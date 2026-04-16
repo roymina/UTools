@@ -33,6 +33,17 @@ namespace UTools.Tests
             Assert.That(received, Is.EqualTo(0));
         }
 
+        [Test]
+        public void PublishWithoutCaching_DoesNotReplayToFutureSubscribers()
+        {
+            int received = 0;
+
+            UMessageCenter.Instance.Publish(new TestMessage { Value = 9 }, cacheIfNoSubscribers: false);
+            UMessageCenter.Instance.Subscribe<TestMessage>(message => received = message.Value);
+
+            Assert.That(received, Is.EqualTo(0));
+        }
+
         private sealed class TestMessage
         {
             public int Value { get; set; }
