@@ -1,7 +1,7 @@
 {
   "name": "com.roymina.utools",
   "displayName": "UTools",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "unity": "2023.2",
   "description": "A lightweight Unity toolkit covering dependency injection, a message center, object lookup helpers, and utility extensions.",
   "dependencies": {

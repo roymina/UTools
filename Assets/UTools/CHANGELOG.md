@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+- Added `PointerEventListener` for dependency-free pointer click, hover, press, and drag handling in `UTools.Runtime`.
+- Added transient `UMessageCenter.Publish(..., cacheIfNoSubscribers: false)` support so pointer events can broadcast globally without replaying stale messages.
+- Added EditMode coverage for transient publish behavior and the new pointer listener callbacks and drag delta forwarding.
+
 ## 1.0.0
 - Stabilized `UDI` scene startup with global fallback injection and `AsyncWaitRoot` subtree gating for required async services.
 - Added `UFind` `[Children]` binding for collecting child GameObjects or component lists from a named parent.
