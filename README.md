@@ -13,6 +13,7 @@ UTools is a lightweight Unity toolkit for dependency injection, UI/object lookup
 | Module | What it is for |
 | --- | --- |
 | `UDI` | Scene/global dependency injection, lifecycle callbacks, async startup gates |
+| `UComponent` | Pointer enter/click/drag listener with Inspector callbacks and global message publishing |
 | `UFind` | Attribute-based component, child, children-list, and `Resources` binding |
 | `UMessage` | Typed publish/subscribe messages with disposable subscriptions |
 | `UUtils` | String, time, file, GameObject, UI, texture, and mesh helpers |
@@ -92,6 +93,24 @@ public sealed class ClockLabel : MonoBehaviour
 - `GlobalInstaller`: prepares **global fallback services for the whole game**.
 - `MonoInstaller`: prepares **scene-specific services for the current scene**.
 - `ScriptableObjectInstaller`: prepares **reusable asset-based config/services for the current scene**.
+
+### What Actually Participates in UDI
+
+The important rule is not "does this class implement a lifecycle interface?" but "has this object entered a `UDIContainer`?"
+
+| Object kind | Needs a scene `GameObject`? | How it joins UDI | What UDI guarantees |
+| --- | --- | --- | --- |
+| Pure C# service, for example `InventoryService : IInitializable` | No | Bind or resolve it through the container | Injection, `[PostInjection]`, lifecycle callbacks |
+| `MonoBehaviour` consumer, for example `HealthPanel : MonoBehaviour` | Yes | Live under a scene injected by `UDIContext`, or be created through `UGameObjectFactory`, `.FromGameObject(...)`, or container-driven creation | Injection, `[PostInjection]`, lifecycle callbacks if it implements lifecycle interfaces |
+| `MonoInstaller` | Yes | Add it to the bootstrap object or assign it into `UDIContext.Installers` | `InstallBindings` is executed during context startup |
+| `ScriptableObjectInstaller` | No, asset only | Assign the asset into `UDIContext.Scriptable Object Installers` | `InstallBindings` is executed for that scene context |
+| `GlobalInstaller` | No, asset only | Put exactly one asset under `Resources` | Global container bootstraps before scenes load |
+
+Notes:
+
+- Implementing `IInitializable`, `IAsyncInitializable`, or `ITickable` does **not** make an object discoverable by itself.
+- Injection is guaranteed only after the object is created, resolved, or explicitly injected by a `UDIContainer`.
+- `MonoInstaller` configures bindings; it is not the same thing as a business service that happens to use lifecycle interfaces.
 
 ### `UDIContext`
 
@@ -182,6 +201,7 @@ Usage:
 - Assign it to `UDIContext` > `Scriptable Object Installers`.
 - Only assets assigned in that list are executed for the current scene.
 - Keep per-scene object references in `MonoInstaller`; keep reusable config/data in `ScriptableObjectInstaller`.
+- `ScriptableObjectInstaller` is not a scene component. Do not attach it to a `GameObject`.
 
 ### `GlobalInstaller`
 
@@ -212,6 +232,7 @@ Usage:
 - Scenes without `UDIContext` can still receive global services.
 - Scenes with one `UDIContext` use local bindings first, then fall back to global bindings.
 - Do not create multiple `GlobalInstaller` assets under `Resources`; the global runtime supports only one.
+- `GlobalInstaller` is also an asset, not a scene component. It is loaded automatically from `Resources`.
 
 ### Binding API
 
@@ -275,6 +296,7 @@ Notes:
 - `[PostInjection]` runs after dependencies are assigned and can also receive resolved parameters.
 - Scene objects are injected by `UDIContext`; runtime prefabs should be created with `UGameObjectFactory` or `PrefabFactory<T>`.
 - UDI runs very early by default. Avoid setting consumer scripts to execute earlier than `UDIContext`.
+- Implementing a lifecycle interface does not replace injection; it only adds callbacks after the object has already entered UDI management.
 
 ### Lifecycle Interfaces
 
@@ -295,6 +317,8 @@ Notes:
 - `LifecycleManager` is added automatically to the `UDIContext` object if missing.
 - Non-lazy and resolved instances are tracked once.
 - `IAsyncInitializable` is not automatically awaited unless its binding is required for context start.
+- Pure C# services can implement these interfaces without any `GameObject`.
+- `MonoBehaviour` classes participate only after the scene context injects them or a factory/container creates them through UDI.
 
 ### Async Injection and Waiting
 
@@ -373,6 +397,109 @@ Notes:
 - Prefer overloads that pass a `Transform parent` when the instance should use the nearest parent context.
 - The factory injects all `MonoBehaviour` components in the created GameObject subtree.
 - If no context exists, the factory falls back to a global/default container and logs a warning.
+- `Object.Instantiate(...)` by itself does not run UDI injection.
+
+### Choosing Between `MonoInstaller`, `ScriptableObjectInstaller`, and Normal Components
+
+Use this rule of thumb:
+
+- `MonoInstaller`: scene bootstrap configuration. Best when bindings need scene references such as cameras, spawn roots, prefabs, or existing components.
+- `ScriptableObjectInstaller`: reusable asset configuration. Best when the same binding set or data asset should be shared by multiple scenes.
+- `GlobalInstaller`: cross-scene fallback registration. Best when a service should exist even in scenes without `UDIContext`.
+- Normal `MonoBehaviour`: gameplay/UI logic that consumes injected services.
+- Pure C# service: domain or runtime logic that does not need Unity callbacks directly, but can still use UDI lifecycle interfaces.
+
+Common mistakes:
+
+- Do not put gameplay logic inside an installer just because an installer can run early.
+- Do not expect a random `MonoBehaviour` created with `new` or plain `Instantiate` to be injected automatically.
+- Do not put more than one `GlobalInstaller` asset under `Resources`.
+
+## UComponent
+
+### `PointerEventListener`
+
+`PointerEventListener` wraps Unity's pointer interfaces into one component:
+
+- `IPointerClickHandler`
+- `IPointerEnterHandler`
+- `IPointerExitHandler`
+- `IPointerDownHandler`
+- `IPointerUpHandler`
+- `IBeginDragHandler`
+- `IDragHandler`
+- `IEndDragHandler`
+
+Add `PointerEventListener` when you want a single component that can:
+
+- react through plain runtime delegates such as `onClick` or `onEnter`
+- expose UnityEvents in the Inspector
+- publish pointer messages globally through `UMessageCenter`
+
+```csharp
+using UnityEngine;
+using UTools;
+
+public sealed class PointerExample : MonoBehaviour
+{
+    [SerializeField] private PointerEventListener listener;
+
+    private IMessageSubscription _subscription;
+
+    private void Awake()
+    {
+        listener.onEnter += () => Debug.Log("Pointer entered");
+        listener.onClickWithData += data => Debug.Log($"Clicked at {data.position}");
+        listener.onDragWithData += (_, delta) => Debug.Log($"Drag delta: {delta}");
+    }
+
+    private void OnEnable()
+    {
+        _subscription = UMessageCenter.Instance.Subscribe<PointerEventMessage>(
+            OnPointerMessage,
+            replayPending: false);
+    }
+
+    private void OnDisable()
+    {
+        _subscription?.Dispose();
+        _subscription = null;
+    }
+
+    private void OnPointerMessage(PointerEventMessage message)
+    {
+        if (message.Target != listener.gameObject)
+        {
+            return;
+        }
+
+        Debug.Log($"{message.EventType} from {message.Target.name}, 3D={message.Is3DObject}, delta={message.Delta}");
+    }
+}
+```
+
+Usage notes:
+
+- The component supports click, enter, exit, down, up, begin-drag, drag, and end-drag.
+- `publishGlobally` is enabled by default. Turn it off when you want only local callbacks/Inspector events.
+- For every event there are three hook styles:
+  - runtime delegates such as `onClick`, `onClickWithData`, `onDragWithData`
+  - Inspector UnityEvents such as `onClickEvent`, `onClickEventWithData`, `onDragEventWithData`
+  - global `PointerEventMessage` publish through `UMessageCenter`
+- `PointerEventMessage` includes `EventType`, `Target`, `EventData`, `Is3DObject`, and `Delta`.
+- `OnPointerClick` ignores events while Unity reports `eventData.dragging`, so a drag does not also emit a click.
+- `Is3DObject` is `true` when the target is not a `RectTransform`.
+
+Scene setup requirements:
+
+- Always have an `EventSystem` in the scene.
+- For UI objects:
+  - place the listener on a UI object under a `Canvas`
+  - the canvas needs a `GraphicRaycaster`
+  - the target graphic must allow raycasts
+- For 3D objects:
+  - add a collider to the target object
+  - use a camera with `PhysicsRaycaster`
 
 ## UFind
 
